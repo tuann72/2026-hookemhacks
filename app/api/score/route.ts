@@ -1,7 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-// POST /api/score — calculate score and calories burned
-export async function POST(req: NextRequest) {
-  const { moves } = await req.json();
+export async function POST() {
+  // TODO: Calculate score
   return NextResponse.json({ score: 0, caloriesBurned: 0 });
 }

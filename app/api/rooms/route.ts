@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-// POST /api/rooms — create a new game room
 export async function POST() {
-  return NextResponse.json({ roomId: "" });
+  // TODO: Create room in Supabase
+  return NextResponse.json({ roomId: "placeholder" });
 }

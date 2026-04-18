@@ -1,8 +1,4 @@
-import { supabase } from "./client";
-
+// TODO: Supabase Realtime will be integrated here
 export function subscribeToRoom(roomId: string, onPayload: (payload: unknown) => void) {
-  return supabase
-    .channel(`room:${roomId}`)
-    .on("broadcast", { event: "pose" }, onPayload)
-    .subscribe();
+  return null;
 }
