@@ -1,5 +1,6 @@
-import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import type { GestureLabel, ArmState, HandState } from "@/types";
+
+type NormalizedLandmark = { x: number; y: number; z: number; visibility?: number };
 
 type Vec3 = { x: number; y: number; z: number };
 
