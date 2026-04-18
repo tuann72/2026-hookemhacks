@@ -8,6 +8,8 @@ import type {
   RigRotations,
 } from "@/types";
 
+const toRad = (deg: number) => (deg * Math.PI) / 180;
+
 export interface BoneRotations {
   leftUpperArm: THREE.Euler;
   leftForearm: THREE.Euler;
@@ -16,8 +18,6 @@ export interface BoneRotations {
 }
 
 export function armStateToBoneRotations(left: ArmState | null, right: ArmState | null): BoneRotations {
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-
   const leftUpperArm = left
     ? new THREE.Euler(0, 0, -toRad(left.raisedHeight * 90))
     : new THREE.Euler();
@@ -33,6 +33,34 @@ export function armStateToBoneRotations(left: ArmState | null, right: ArmState |
     : new THREE.Euler();
 
   return { leftUpperArm, leftForearm, rightUpperArm, rightForearm };
+}
+
+/**
+ * Convert teammate's `ArmState` (CV-derived arm geometry) into the
+ * `RigRotations` shape my Avatar consumes via applyRigRotations.
+ *
+ * Axis convention for my rig (differs from VRM conventions some solvers use):
+ *   - UpperArm.z: raise/lower. Left arm uses negative z to tilt outward;
+ *     right arm uses positive z. raisedHeight ∈ [0,1] maps to 0..90°.
+ *   - LowerArm.x: elbow bend toward body. Straight elbow (180°) = 0 rad,
+ *     fully bent (≈0°) = -π rad. Negative x rotates the forearm forward.
+ */
+export function armStateToRigRotations(
+  left: ArmState | null,
+  right: ArmState | null
+): RigRotations {
+  const pose: Partial<Record<HumanoidBoneName, BoneRotation>> = {};
+
+  if (left) {
+    pose.LeftUpperArm = { x: 0, y: 0, z: -(left.raisedHeight * (Math.PI / 2)) };
+    pose.LeftLowerArm = { x: -toRad(180 - left.elbowAngle), y: 0, z: 0 };
+  }
+  if (right) {
+    pose.RightUpperArm = { x: 0, y: 0, z: right.raisedHeight * (Math.PI / 2) };
+    pose.RightLowerArm = { x: -toRad(180 - right.elbowAngle), y: 0, z: 0 };
+  }
+
+  return { pose };
 }
 
 /**

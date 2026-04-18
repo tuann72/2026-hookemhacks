@@ -98,9 +98,12 @@ export function Avatar({
 
     // --- Live CV path ---
     // When Track 1's pipeline sets a rig on this player's pose slot,
-    // apply it directly. This is the entire integration surface.
-    if (pose?.rig) {
-      applyRigRotations(bones.current, pose.rig);
+    // apply it directly. Empty pose object → treat as no detection and
+    // fall through to idle (keeps avatar alive when the user steps away
+    // from the webcam).
+    const rigPose = pose?.rig?.pose;
+    if (rigPose && Object.keys(rigPose).length > 0) {
+      applyRigRotations(bones.current, pose!.rig!);
       return;
     }
 
