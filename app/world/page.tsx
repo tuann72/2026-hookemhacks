@@ -1,8 +1,7 @@
 "use client";
 
-// 3D avatar + CV rig test route. Keeps the rigged humanoid reachable while
-// the main game UI lives at /game/[roomId] (teammate's design). Use this
-// page for debugging CV → rig mappings independently of gameplay state.
+// Full-screen 3D world — the arena + rigged avatars + CV all at max size
+// without the 2D HUD. Linked from the "Full" button in AvatarStage.
 
 import dynamic from "next/dynamic";
 import BodyDetector from "@/components/detection/BodyDetector";
@@ -24,7 +23,7 @@ function CanvasFallback() {
   );
 }
 
-export default function AvatarTestPage() {
+export default function WorldPage() {
   const debug = typeof window !== "undefined" && window.location.search.includes("debug=1");
 
   return (
@@ -33,7 +32,7 @@ export default function AvatarTestPage() {
       <div className="relative h-screen w-screen overflow-hidden bg-black">
         <GameCanvas debug={debug} />
         <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">
-          avatar rig test · CV driven
+          world · CV driven
         </div>
       </div>
     </BodyDetector>

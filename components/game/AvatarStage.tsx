@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import BodyDetector from "@/components/detection/BodyDetector";
 import { CVRigBridge } from "@/components/detection/CVRigBridge";
 import { SELF_PLAYER_ID } from "@/types";
@@ -50,6 +51,35 @@ export function AvatarStage({ debug = false }: { debug?: boolean }) {
         }}
       >
         <GameCanvas debug={debug} />
+        <Link
+          href="/world"
+          aria-label="Open fullscreen world view"
+          title="Open fullscreen world view"
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 8,
+            zIndex: 2,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "6px 10px",
+            borderRadius: 999,
+            background: "rgba(0,0,0,0.55)",
+            border: "1px solid rgba(255,255,255,0.2)",
+            color: "#fff",
+            fontFamily: "monospace",
+            fontSize: 10,
+            letterSpacing: "0.2em",
+            textTransform: "uppercase",
+            textDecoration: "none",
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+          }}
+        >
+          <span style={{ fontSize: 11, lineHeight: 1 }}>⤢</span>
+          <span>Full</span>
+        </Link>
       </div>
     </BodyDetector>
   );
