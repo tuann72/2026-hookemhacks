@@ -21,11 +21,13 @@ export class GameChannel {
   private readonly roomId: string;
   private readonly playerId: string;
   private readonly playerName: string;
+  private onlineAt: string;
 
   constructor(roomId: string, playerId: string, playerName: string) {
     this.roomId = roomId;
     this.playerId = playerId;
     this.playerName = playerName;
+    this.onlineAt = new Date().toISOString();
     this.channel = supabase.channel(`room:${roomId}`, {
       config: {
         broadcast: { self: false, ack: false }, // ack:false = fire-and-forget for lowest latency
@@ -95,6 +97,7 @@ export class GameChannel {
               playerId: first.playerId,
               name: first.name,
               onlineAt: first.onlineAt,
+              ready: Boolean(first.ready),
             });
           }
         }
@@ -105,10 +108,12 @@ export class GameChannel {
     return new Promise((resolve, reject) => {
       this.channel.subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
+          this.onlineAt = new Date().toISOString();
           await this.channel.track({
             playerId: this.playerId,
             name: this.playerName,
-            onlineAt: new Date().toISOString(),
+            onlineAt: this.onlineAt,
+            ready: false,
           });
           resolve();
         } else if (status === "CHANNEL_ERROR") {
@@ -166,6 +171,16 @@ export class GameChannel {
 
   // Fire-and-forget pose frame. Expect callers to throttle (~15 Hz) — this
   // method itself does not rate-limit.
+  /** Updates lobby “calibrated & ready” flag for this connection (presence). */
+  setLobbyReady(ready: boolean): void {
+    void this.channel.track({
+      playerId: this.playerId,
+      name: this.playerName,
+      onlineAt: this.onlineAt,
+      ready,
+    });
+  }
+
   broadcastPoseSnapshot(
     snapshot: Omit<PoseSnapshot, "playerId" | "timestamp">,
   ): void {

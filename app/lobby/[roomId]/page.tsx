@@ -29,7 +29,7 @@ export default function LobbyPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [, setLocalReady] = useState(false);
+  const [localReady, setLocalReady] = useState(false);
 
   // Fetch room by code; idempotently ensure membership in room_players.
   useEffect(() => {
@@ -68,7 +68,7 @@ export default function LobbyPage() {
     };
   }, [code, playerId, router]);
 
-  const { players, broadcastGameEvent } = useGameChannel({
+  const { players, broadcastGameEvent, setLobbyReady } = useGameChannel({
     roomId: room?.id ?? "",
     playerId,
     playerName: playerName || playerId,
@@ -173,6 +173,8 @@ export default function LobbyPage() {
               const isSelf = p.playerId === playerId;
               const isRoomHost = room?.host_id === p.playerId;
               const displayName = isSelf ? "You" : (p.name || p.playerId);
+              const presenceReady = Boolean(p.ready);
+              const rowReady = isSelf ? localReady || presenceReady : presenceReady;
               return (
                 <div
                   key={p.playerId}
@@ -187,8 +189,8 @@ export default function LobbyPage() {
                       {isRoomHost && <span className="host-badge mono">HOST</span>}
                     </div>
                     <div className="player-meta mono">
-                      <span className="ready-dot" />
-                      In the cove
+                      <span className={`ready-dot ${rowReady ? "" : "waiting"}`} />
+                      {rowReady ? "Calibrated & ready" : "Calibrating…"}
                     </div>
                   </div>
                   <div className="player-meta mono">P{i + 1}</div>
@@ -240,7 +242,12 @@ export default function LobbyPage() {
         {/* ── Right: calibration ── */}
         <div className="lobby-cal card">
           <BodyDetector>
-            <CalibrationPanel onReady={() => setLocalReady(true)} />
+            <CalibrationPanel
+              onReady={() => {
+                setLocalReady(true);
+                setLobbyReady(true);
+              }}
+            />
           </BodyDetector>
         </div>
       </div>

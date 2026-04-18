@@ -105,6 +105,10 @@ export function useGameChannel({
     []
   );
 
+  const setLobbyReady = useCallback((ready: boolean) => {
+    channelRef.current?.setLobbyReady(ready);
+  }, []);
+
   return {
     connected,
     players,
@@ -113,5 +117,6 @@ export function useGameChannel({
     broadcastHit,
     broadcastGameEvent,
     broadcastPoseSnapshot,
+    setLobbyReady,
   };
 }
