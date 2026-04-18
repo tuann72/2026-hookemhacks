@@ -24,15 +24,21 @@ function CanvasFallback() {
 }
 
 export default function WorldPage() {
-  const debug = typeof window !== "undefined" && window.location.search.includes("debug=1");
+  // Debug overlay on by default — the webcam feed + arm skeleton + hand
+  // landmarks is the whole point of this route: it lets you watch the
+  // incoming CV signal while the avatar reacts to it in real time.
+  // Append ?debug=0 to hide the overlay if you want a clean capture.
+  const hideDebug =
+    typeof window !== "undefined" && window.location.search.includes("debug=0");
+  const debug = !hideDebug;
 
   return (
     <BodyDetector debug={debug}>
       <CVRigBridge playerId={SELF_PLAYER_ID} />
       <div className="relative h-screen w-screen overflow-hidden bg-black">
-        <GameCanvas debug={debug} />
+        <GameCanvas debug={false /* R3F stats off even in CV debug mode */} />
         <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">
-          world · CV driven
+          world · CV driven {debug ? "· feed bottom-right" : ""}
         </div>
       </div>
     </BodyDetector>
