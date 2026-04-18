@@ -59,13 +59,21 @@ export function armStateToRigRotations(
   //
   // LowerArm.x: elbow bend; -(180° − elbowAngle) in radians so a straight
   // arm is 0 and fully bent is -π.
+  // Elbow bend direction: the magnitude of the bend from the 3D angle
+  // doesn't say whether the forearm is in front of or behind the body.
+  // Default (-1) sends the forearm toward avatar-forward (into scene) —
+  // correct for bicep curls, forward reaches, and hands-to-face poses.
+  // When the wrist is clearly behind the shoulder in world-space z, flip
+  // to +1 so the forearm bends behind the head instead.
+  const BACKWARD_BEND_Z = 0.08; // meters
   if (left) {
     pose.LeftUpperArm = {
       x: -left.forwardAngle,
       y: 0,
       z: left.sideRaiseAngle,
     };
-    pose.LeftLowerArm = { x: -toRad(180 - left.elbowAngle), y: 0, z: 0 };
+    const leftSign = left.wristZOffset > BACKWARD_BEND_Z ? 1 : -1;
+    pose.LeftLowerArm = { x: leftSign * toRad(180 - left.elbowAngle), y: 0, z: 0 };
   }
   if (right) {
     pose.RightUpperArm = {
@@ -73,7 +81,8 @@ export function armStateToRigRotations(
       y: 0,
       z: right.sideRaiseAngle,
     };
-    pose.RightLowerArm = { x: -toRad(180 - right.elbowAngle), y: 0, z: 0 };
+    const rightSign = right.wristZOffset > BACKWARD_BEND_Z ? 1 : -1;
+    pose.RightLowerArm = { x: rightSign * toRad(180 - right.elbowAngle), y: 0, z: 0 };
   }
 
   return { pose };

@@ -7,6 +7,10 @@ import {
 
 export interface RawPoseResult {
   poseLandmarks: NormalizedLandmark[][];
+  // Real-world 3D landmarks (meters, origin at hip-center). The z here is
+  // true depth, not the normalized landmarks' pseudo-depth, so joint angles
+  // computed from these are robust to camera-plane projection collapse.
+  poseWorldLandmarks: NormalizedLandmark[][];
   leftHandLandmarks: NormalizedLandmark[] | null;
   rightHandLandmarks: NormalizedLandmark[] | null;
 }
@@ -43,7 +47,7 @@ export async function initPose(): Promise<void> {
 
 export function processFrame(video: HTMLVideoElement, timestamp: number): RawPoseResult {
   if (!poseLandmarker || !handLandmarker) {
-    return { poseLandmarks: [], leftHandLandmarks: null, rightHandLandmarks: null };
+    return { poseLandmarks: [], poseWorldLandmarks: [], leftHandLandmarks: null, rightHandLandmarks: null };
   }
 
   const poseResult = poseLandmarker.detectForVideo(video, timestamp);
@@ -61,6 +65,7 @@ export function processFrame(video: HTMLVideoElement, timestamp: number): RawPos
 
   return {
     poseLandmarks: poseResult.landmarks,
+    poseWorldLandmarks: poseResult.worldLandmarks ?? [],
     leftHandLandmarks,
     rightHandLandmarks,
   };
