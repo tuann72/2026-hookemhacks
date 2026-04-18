@@ -56,7 +56,14 @@ export function calcRaisedHeight(wrist: Vec3, shoulder: Vec3): number {
 export function calcForwardAngle(wrist: Vec3, shoulder: Vec3): number {
   const dy = wrist.y - shoulder.y; // positive when wrist below shoulder
   const dz = wrist.z - shoulder.z; // negative when wrist forward of shoulder
-  return Math.atan2(-dz, Math.max(dy, 1e-4));
+  // Linear fade once the wrist rises past the shoulder. A hard cutoff
+  // caused a glitch where a forward-extended arm lifted past shoulder
+  // level snapped from ≈π/2 to 0 in one frame. The fade keeps motion
+  // smooth and still suppresses the ±π/2 noise that fires when dy goes
+  // well negative (tiny-dy denominator amplifies z noise).
+  const fade = dy >= 0 ? 1 : Math.max(0, 1 + dy / 0.08);
+  if (fade <= 0) return 0;
+  return fade * Math.atan2(-dz, Math.max(Math.abs(dy), 1e-4));
 }
 
 /**
@@ -79,6 +86,11 @@ export function calcForwardAngle(wrist: Vec3, shoulder: Vec3): number {
 export function calcSideRaiseAngle(wrist: Vec3, shoulder: Vec3): number {
   const dx = wrist.x - shoulder.x; // signed
   const dy = wrist.y - shoulder.y; // positive below, negative above
+  // When the arm is pointed at the camera, dx/dy both collapse and this
+  // angle becomes noisy garbage. Short-circuit to 0 so the forward-reach
+  // rotation isn't compounded with phantom sideways tilt.
+  const span2D = Math.hypot(dx, dy);
+  if (span2D < 0.06) return 0;
   return Math.atan2(dx, dy);
 }
 
@@ -122,27 +134,46 @@ export function buildArmState(
   shoulder: NormalizedLandmark,
   elbow: NormalizedLandmark,
   wrist: NormalizedLandmark,
+  worldShoulder: NormalizedLandmark | undefined,
+  worldElbow: NormalizedLandmark | undefined,
+  worldWrist: NormalizedLandmark | undefined,
   prevWrist: Vec3 | null,
   dt: number
 ): ArmState {
-  // When the arm points at/away from the camera, shoulder/elbow/wrist all
-  // project to nearly the same pixel — 2D angle math collapses and yields
-  // garbage. If the 2D shoulder→wrist span is very short, assume the arm is
-  // foreshortened and call it straight (180°). Threshold 0.06 of the frame
-  // is well below a typical side-view arm span (~0.15–0.25) so this only
-  // kicks in for truly head-on poses.
   const span2D = Math.hypot(wrist.x - shoulder.x, wrist.y - shoulder.y);
-  const elbowAngle = span2D < 0.06 ? 180 : calcAngle2D(shoulder, elbow, wrist);
+  // Prefer MediaPipe's real-world 3D landmarks (meters, hip-centered) for
+  // the elbow angle — true 3D means the bend is captured correctly in any
+  // arm orientation, including arm-near-vertical poses where 2D collapses.
+  // Fall back to image landmarks (and the head-on short-circuit) if world
+  // data is missing on a frame.
+  const elbowAngle =
+    worldShoulder && worldElbow && worldWrist
+      ? calcAngle(worldShoulder, worldElbow, worldWrist)
+      : span2D < 0.06
+        ? 180
+        : calcAngle(shoulder, elbow, wrist);
   const swingSpeed = prevWrist ? calcSwingSpeed(prevWrist, wrist, dt) : 0;
   const raisedHeight = calcRaisedHeight(wrist, shoulder);
-  const forwardAngle = calcForwardAngle(wrist, shoulder);
-  const sideRaiseAngle = calcSideRaiseAngle(wrist, shoulder);
+  // Drive upper-arm orientation from the shoulder→ELBOW segment, not
+  // shoulder→wrist. For a straight arm they're identical, but for a bent
+  // arm (e.g. boxing guard: elbow out to side, wrist in front of face)
+  // wrist-based angles short-circuit and the upper arm stays hanging.
+  // Elbow is what actually defines the upper-arm direction.
+  const forwardAngle = calcForwardAngle(elbow, shoulder);
+  const sideRaiseAngle = calcSideRaiseAngle(elbow, shoulder);
+  // World-space z offset (meters) is a much cleaner signal than the image-
+  // landmark pseudo-z for disambiguating forearm-forward vs -backward.
+  const wristZOffset =
+    worldWrist && worldShoulder
+      ? worldWrist.z - worldShoulder.z
+      : wrist.z - shoulder.z;
   return {
     elbowAngle,
     swingSpeed,
     raisedHeight,
     forwardAngle,
     sideRaiseAngle,
+    wristZOffset,
     isExtended: elbowAngle > 150,
   };
 }
