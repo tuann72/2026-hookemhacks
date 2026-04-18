@@ -1,7 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-// POST /api/embeddings — generate pose embeddings for VectorDB
-export async function POST(req: NextRequest) {
-  const { pose } = await req.json();
+export async function POST() {
+  // TODO: Generate embeddings
   return NextResponse.json({ embedding: [] });
 }

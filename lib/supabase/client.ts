@@ -1,6 +1,2 @@
-import { createBrowserClient } from "@supabase/ssr";
-
-export const supabase = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// TODO: Supabase client will be integrated here
+export const supabase = null;
