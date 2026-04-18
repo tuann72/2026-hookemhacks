@@ -1,33 +1,45 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Backdrop } from "@/components/scenery/Scenery";
 import { BRAND } from "@/components/shared/constants";
-
-const WORDS = ["SURF", "LAVA", "PALM", "REEF", "MANA", "TIDE", "DUSK", "KAMI", "HULA", "KONA"];
-
-function generateCode(): string {
-  return WORDS[Math.floor(Math.random() * WORDS.length)];
-}
+import { createRoom } from "@/lib/multiplayer/roomService";
+import { useIdentity } from "@/hooks/useIdentity";
 
 export default function CreatePage() {
   const router = useRouter();
-  const [code] = useState(() => generateCode());
-  const [name, setName] = useState("");
+  const { playerId, playerName, setPlayerName } = useIdentity();
+  const [code, setCode] = useState("");
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const creatingRef = useRef(false);
+
+  useEffect(() => {
+    if (!playerId || code || creatingRef.current) return;
+    creatingRef.current = true;
+    createRoom(playerId)
+      .then((room) => setCode(room.code))
+      .catch((e) => {
+        setError((e as Error).message);
+        creatingRef.current = false;
+      });
+  }, [playerId, code]);
 
   const copyCode = () => {
+    if (!code) return;
     navigator.clipboard.writeText(code).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 1400);
   };
 
   const openLobby = () => {
-    if (!name.trim()) return;
+    if (!playerName.trim() || !code) return;
     router.push(`/lobby/${code}`);
   };
+
+  const slots = [0, 1, 2, 3].map((i) => code[i] ?? "");
 
   return (
     <div className="app-stage" data-time="day" data-intensity="normal">
@@ -64,13 +76,20 @@ export default function CreatePage() {
 
           <div className="room-code-label">Your room word</div>
           <div className="room-code">
-            {code.split("").map((c, i) => (
-              <div key={i} className="code-digit">{c}</div>
+            {slots.map((c, i) => (
+              <div key={i} className="code-digit" style={!c ? { opacity: 0.35 } : undefined}>
+                {c || "·"}
+              </div>
             ))}
           </div>
           <div className="copy-row">
-            <span>Share this with friends</span>
-            <button type="button" className={`copy-btn ${copied ? "copied" : ""}`} onClick={copyCode}>
+            <span>{code ? "Share this with friends" : "Reserving a word…"}</span>
+            <button
+              type="button"
+              className={`copy-btn ${copied ? "copied" : ""}`}
+              onClick={copyCode}
+              disabled={!code}
+            >
               {copied ? "✓ COPIED" : "COPY CODE"}
             </button>
           </div>
@@ -81,12 +100,18 @@ export default function CreatePage() {
               id="host-name"
               className="name-input"
               placeholder="e.g. Lava Larry"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && openLobby()}
               autoFocus
             />
           </div>
+
+          {error && (
+            <p style={{ color: "#c0392b", fontSize: 13, marginTop: 12 }}>
+              Couldn&apos;t create room: {error}
+            </p>
+          )}
 
           <div className="action-row" style={{ marginTop: 24 }}>
             <Link href="/" className="btn ghost" style={{ flex: "0 0 auto", textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -95,8 +120,8 @@ export default function CreatePage() {
             <button
               type="button"
               className="btn primary"
-              style={{ flex: 1, opacity: name.trim() ? 1 : 0.5 }}
-              disabled={!name.trim()}
+              style={{ flex: 1, opacity: playerName.trim() && code ? 1 : 0.5 }}
+              disabled={!playerName.trim() || !code}
               onClick={openLobby}
             >
               Open lobby →
