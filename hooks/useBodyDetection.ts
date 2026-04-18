@@ -120,8 +120,17 @@ export function useBodyDetectionProvider(
 
     if (raw.poseLandmarks.length > 0) {
       const lm = raw.poseLandmarks[0];
-      leftArm = buildArmState(lm[POSE.RIGHT_SHOULDER], lm[POSE.RIGHT_ELBOW], lm[POSE.RIGHT_WRIST], prevWristsRef.current.left, dt);
-      rightArm = buildArmState(lm[POSE.LEFT_SHOULDER], lm[POSE.LEFT_ELBOW], lm[POSE.LEFT_WRIST], prevWristsRef.current.right, dt);
+      const wlm = raw.poseWorldLandmarks[0]; // may be undefined on rare frames
+      leftArm = buildArmState(
+        lm[POSE.RIGHT_SHOULDER], lm[POSE.RIGHT_ELBOW], lm[POSE.RIGHT_WRIST],
+        wlm?.[POSE.RIGHT_SHOULDER], wlm?.[POSE.RIGHT_ELBOW], wlm?.[POSE.RIGHT_WRIST],
+        prevWristsRef.current.left, dt,
+      );
+      rightArm = buildArmState(
+        lm[POSE.LEFT_SHOULDER], lm[POSE.LEFT_ELBOW], lm[POSE.LEFT_WRIST],
+        wlm?.[POSE.LEFT_SHOULDER], wlm?.[POSE.LEFT_ELBOW], wlm?.[POSE.LEFT_WRIST],
+        prevWristsRef.current.right, dt,
+      );
       prevWristsRef.current = { left: lm[POSE.RIGHT_WRIST], right: lm[POSE.LEFT_WRIST] };
     }
 

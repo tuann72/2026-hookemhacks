@@ -56,12 +56,14 @@ export function calcRaisedHeight(wrist: Vec3, shoulder: Vec3): number {
 export function calcForwardAngle(wrist: Vec3, shoulder: Vec3): number {
   const dy = wrist.y - shoulder.y; // positive when wrist below shoulder
   const dz = wrist.z - shoulder.z; // negative when wrist forward of shoulder
-  // Wrist clearly above shoulder — the sagittal "forward from hanging"
-  // axis collapses and z noise gets amplified by the tiny-dy denominator,
-  // so the arm would spuriously fire forwardAngle ≈ ±π/2 and point at the
-  // camera instead of going up. Let sideRaiseAngle own this regime.
-  if (dy < -0.05) return 0;
-  return Math.atan2(-dz, Math.max(dy, 1e-4));
+  // Linear fade as the wrist rises past the shoulder. A hard cutoff here
+  // caused a glitch: a forward-extended arm lifted past shoulder level
+  // would snap from ≈π/2 to 0 in one frame. Fading keeps motion smooth
+  // across the transition and still suppresses the ±π/2 noise that would
+  // otherwise fire when dy goes well negative.
+  const fade = dy >= 0 ? 1 : Math.max(0, 1 + dy / 0.08);
+  if (fade <= 0) return 0;
+  return fade * Math.atan2(-dz, Math.max(Math.abs(dy), 1e-4));
 }
 
 /**
@@ -133,6 +135,9 @@ export function buildArmState(
   shoulder: NormalizedLandmark,
   elbow: NormalizedLandmark,
   wrist: NormalizedLandmark,
+  worldShoulder: NormalizedLandmark | undefined,
+  worldElbow: NormalizedLandmark | undefined,
+  worldWrist: NormalizedLandmark | undefined,
   prevWrist: Vec3 | null,
   dt: number
 ): ArmState {
@@ -143,17 +148,36 @@ export function buildArmState(
   // is well below a typical side-view arm span (~0.15–0.25) so this only
   // kicks in for truly head-on poses.
   const span2D = Math.hypot(wrist.x - shoulder.x, wrist.y - shoulder.y);
-  const elbowAngle = span2D < 0.06 ? 180 : calcAngle2D(shoulder, elbow, wrist);
+  // Prefer MediaPipe's real-world 3D landmarks (meters, hip-centered) for
+  // the elbow angle — they give true 3D positions so the bend is captured
+  // correctly in any arm orientation, including arm-near-vertical poses
+  // where 2D collapses. Fall back to image landmarks if world data missing.
+  // Pattern borrowed from ganeshsar/UnityPythonMediaPipeBodyPose (the
+  // Python pose_world_landmarks stream).
+  const elbowAngle =
+    worldShoulder && worldElbow && worldWrist
+      ? calcAngle(worldShoulder, worldElbow, worldWrist)
+      : span2D < 0.06
+        ? 180
+        : calcAngle(shoulder, elbow, wrist);
   const swingSpeed = prevWrist ? calcSwingSpeed(prevWrist, wrist, dt) : 0;
   const raisedHeight = calcRaisedHeight(wrist, shoulder);
   const forwardAngle = calcForwardAngle(wrist, shoulder);
   const sideRaiseAngle = calcSideRaiseAngle(wrist, shoulder);
+  // World-space z offset (in meters) is a much cleaner signal for
+  // disambiguating forearm-forward vs forearm-backward than the image-
+  // landmark pseudo-z, so use it for the elbow-sign flip when available.
+  const wristZOffset =
+    worldWrist && worldShoulder
+      ? worldWrist.z - worldShoulder.z
+      : wrist.z - shoulder.z;
   return {
     elbowAngle,
     swingSpeed,
     raisedHeight,
     forwardAngle,
     sideRaiseAngle,
+    wristZOffset,
     isExtended: elbowAngle > 150,
   };
 }

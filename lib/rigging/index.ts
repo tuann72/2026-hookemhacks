@@ -68,19 +68,22 @@ export function armStateToRigRotations(
   //
   // If a slot is ever configured to face the camera (mirror mode), flip
   // the sign on these two lines.
-  // Elbow sign flips once the upper arm crosses horizontal: after
-  // sideRaiseAngle passes ±π/2, the upper arm's local X axis has rotated
-  // into the opposite world direction, so a constant-sign bend inverts.
-  // Flipping the sign above that threshold keeps the forearm bending the
-  // natural way in both below- and above-T-pose regimes.
+  // Elbow bend direction: the magnitude of the bend from the 2D/3D angle
+  // doesn't say whether the forearm is in front of or behind the body.
+  // Default (-1) sends the forearm toward avatar-forward (into scene) —
+  // correct for bicep curls, forward reaches, and hands-to-face poses
+  // (absolute cinema). When the wrist is clearly behind the shoulder in
+  // world-space z (hands-behind-head pose), flip to +1 so the forearm
+  // bends behind the avatar's head instead.
+  const BACKWARD_BEND_Z = 0.08; // meters, in MediaPipe world-landmark space
   if (left) {
     pose.LeftUpperArm = {
       x: -left.forwardAngle,
       y: 0,
       z: left.sideRaiseAngle,
     };
-    const leftElbowSign = Math.abs(left.sideRaiseAngle) > Math.PI / 2 ? 1 : -1;
-    pose.LeftLowerArm = { x: leftElbowSign * toRad(180 - left.elbowAngle), y: 0, z: 0 };
+    const leftSign = left.wristZOffset > BACKWARD_BEND_Z ? 1 : -1;
+    pose.LeftLowerArm = { x: leftSign * toRad(180 - left.elbowAngle), y: 0, z: 0 };
   }
   if (right) {
     pose.RightUpperArm = {
@@ -88,8 +91,8 @@ export function armStateToRigRotations(
       y: 0,
       z: right.sideRaiseAngle,
     };
-    const rightElbowSign = Math.abs(right.sideRaiseAngle) > Math.PI / 2 ? 1 : -1;
-    pose.RightLowerArm = { x: rightElbowSign * toRad(180 - right.elbowAngle), y: 0, z: 0 };
+    const rightSign = right.wristZOffset > BACKWARD_BEND_Z ? 1 : -1;
+    pose.RightLowerArm = { x: rightSign * toRad(180 - right.elbowAngle), y: 0, z: 0 };
   }
 
   return { pose };

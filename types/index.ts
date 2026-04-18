@@ -160,6 +160,15 @@ export interface ArmState {
    * raisedHeight for driving the upper arm's sideways tilt.
    */
   sideRaiseAngle: number;
+  /**
+   * Signed depth: wrist.z − shoulder.z from MediaPipe pose. Negative means
+   * the wrist is closer to the camera than the shoulder (forearm reaches
+   * forward); positive means the wrist is behind the shoulder (forearm
+   * reaches back, e.g. hands-behind-head). Used to pick the elbow bend
+   * direction when the upper arm is past T-pose, since the 2D elbow angle
+   * alone can't tell a forward bend from a backward one.
+   */
+  wristZOffset: number;
   isExtended: boolean;
 }
 
