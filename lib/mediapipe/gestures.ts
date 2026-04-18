@@ -14,6 +14,23 @@ export function calcAngle(a: Vec3, b: Vec3, c: Vec3): number {
   return (Math.acos(Math.max(-1, Math.min(1, dot / (magAB * magCB)))) * 180) / Math.PI;
 }
 
+/**
+ * 2D variant — ignores the z coordinate. MediaPipe Pose's z on body landmarks
+ * is pseudo-3D (regressed, not true depth) and noisy, so including it in
+ * elbow-angle math produces wobble. XY-only matches what you'd eyeball from
+ * the video frame and is far more stable. Use this for elbow/angle-of-limb
+ * calculations; keep the full 3D calcAngle for things that genuinely need it.
+ */
+export function calcAngle2D(a: Vec3, b: Vec3, c: Vec3): number {
+  const ab = { x: a.x - b.x, y: a.y - b.y };
+  const cb = { x: c.x - b.x, y: c.y - b.y };
+  const dot = ab.x * cb.x + ab.y * cb.y;
+  const magAB = Math.hypot(ab.x, ab.y);
+  const magCB = Math.hypot(cb.x, cb.y);
+  if (magAB === 0 || magCB === 0) return 0;
+  return (Math.acos(Math.max(-1, Math.min(1, dot / (magAB * magCB)))) * 180) / Math.PI;
+}
+
 export function calcSwingSpeed(prev: Vec3, curr: Vec3, dt: number): number {
   if (dt === 0) return 0;
   const dist = Math.sqrt((curr.x - prev.x) ** 2 + (curr.y - prev.y) ** 2 + (curr.z - prev.z) ** 2);
@@ -37,6 +54,29 @@ export function calcForwardAngle(wrist: Vec3, shoulder: Vec3): number {
   const dy = wrist.y - shoulder.y; // positive when wrist below shoulder
   const dz = wrist.z - shoulder.z; // negative when wrist forward of shoulder
   return Math.atan2(-dz, Math.max(dy, 1e-4));
+}
+
+/**
+ * Signed image-plane angle from straight-down to arm direction, in radians.
+ * Uses only X/Y so it's robust: an arm pointed at the camera has small dx
+ * AND small dy in 2D → near-zero side raise (vs teammate's calcRaisedHeight
+ * which fires at 0.5 in that case, falsely signalling a half-raised arm).
+ *
+ * Sign preserved so crossing over the body reads as the opposite rotation
+ * from outward raise:
+ *   positive = arm moves in the +x image direction from the shoulder
+ *   negative = arm moves in the -x image direction
+ *
+ * Magnitude:
+ *   0       = arm hanging straight down
+ *   ±π/2    = arm horizontal (outward or crossed, depending on sign)
+ *   π       = arm raised straight up
+ *   ≈ 0     = arm pointed forward (toward camera)
+ */
+export function calcSideRaiseAngle(wrist: Vec3, shoulder: Vec3): number {
+  const dx = wrist.x - shoulder.x; // signed
+  const dy = wrist.y - shoulder.y; // positive below, negative above
+  return Math.atan2(dx, dy);
 }
 
 function fingerCurl(tip: NormalizedLandmark, pip: NormalizedLandmark, mcp: NormalizedLandmark): number {
@@ -82,15 +122,24 @@ export function buildArmState(
   prevWrist: Vec3 | null,
   dt: number
 ): ArmState {
-  const elbowAngle = calcAngle(shoulder, elbow, wrist);
+  // When the arm points at/away from the camera, shoulder/elbow/wrist all
+  // project to nearly the same pixel — 2D angle math collapses and yields
+  // garbage. If the 2D shoulder→wrist span is very short, assume the arm is
+  // foreshortened and call it straight (180°). Threshold 0.06 of the frame
+  // is well below a typical side-view arm span (~0.15–0.25) so this only
+  // kicks in for truly head-on poses.
+  const span2D = Math.hypot(wrist.x - shoulder.x, wrist.y - shoulder.y);
+  const elbowAngle = span2D < 0.06 ? 180 : calcAngle2D(shoulder, elbow, wrist);
   const swingSpeed = prevWrist ? calcSwingSpeed(prevWrist, wrist, dt) : 0;
   const raisedHeight = calcRaisedHeight(wrist, shoulder);
   const forwardAngle = calcForwardAngle(wrist, shoulder);
+  const sideRaiseAngle = calcSideRaiseAngle(wrist, shoulder);
   return {
     elbowAngle,
     swingSpeed,
     raisedHeight,
     forwardAngle,
+    sideRaiseAngle,
     isExtended: elbowAngle > 150,
   };
 }

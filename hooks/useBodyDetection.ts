@@ -74,6 +74,8 @@ const defaultState: BodyTrackingState = {
   rightArm: null,
   leftHand: null,
   rightHand: null,
+  leftHandLandmarks: null,
+  rightHandLandmarks: null,
   fps: 0,
   isReady: false,
 };
@@ -133,6 +135,8 @@ export function useBodyDetectionProvider(
       rightArm,
       leftHand: raw.leftHandLandmarks ? buildHandState(raw.leftHandLandmarks) : null,
       rightHand: raw.rightHandLandmarks ? buildHandState(raw.rightHandLandmarks) : null,
+      leftHandLandmarks: raw.leftHandLandmarks,
+      rightHandLandmarks: raw.rightHandLandmarks,
       fps: fps ?? prev.fps,
       isReady: true,
     }));

@@ -152,6 +152,14 @@ export interface ArmState {
    * pointed backward. Computed from shoulder/wrist Y+Z deltas.
    */
   forwardAngle: number;
+  /**
+   * Radians — arm angle from straight-down in the image plane (XY only).
+   * 0 = arm hanging, π/2 = arm horizontal to the side, π = arm raised up.
+   * Does NOT fire when the arm is forward (toward camera), so it separates
+   * "side raise" from "forward reach" cleanly. Use this instead of
+   * raisedHeight for driving the upper arm's sideways tilt.
+   */
+  sideRaiseAngle: number;
   isExtended: boolean;
 }
 
@@ -165,6 +173,14 @@ export interface BodyTrackingState {
   rightArm: ArmState | null;
   leftHand: HandState | null;
   rightHand: HandState | null;
+  /**
+   * Raw 21-landmark MediaPipe hand output. Exposed so consumers can compute
+   * per-finger joint angles for avatar rigging. `null` when the hand isn't
+   * detected. Structured as {x, y, z} per landmark (z is wrist-relative and
+   * more reliable than body pseudo-z).
+   */
+  leftHandLandmarks: PoseLandmark[] | null;
+  rightHandLandmarks: PoseLandmark[] | null;
   fps: number;
   isReady: boolean;
 }

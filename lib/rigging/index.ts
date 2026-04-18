@@ -51,14 +51,19 @@ export function armStateToRigRotations(
 ): RigRotations {
   const pose: Partial<Record<HumanoidBoneName, BoneRotation>> = {};
 
-  // UpperArm.x: forward/back swing. In my rig, negative x rotates arm forward
-  // in the character's local frame; ArmState.forwardAngle is positive when the
-  // user's arm is forward of the shoulder, so we flip the sign.
+  // UpperArm.z: signed sideRaiseAngle lets the arm cross the body — negative
+  // side raises outward, positive crosses inward. Replaces the old unsigned
+  // raisedHeight (which also misfired for forward-pointing arms).
+  //
+  // UpperArm.x: forward/back swing in the sagittal plane.
+  //
+  // LowerArm.x: elbow bend; -(180° − elbowAngle) in radians so a straight
+  // arm is 0 and fully bent is -π.
   if (left) {
     pose.LeftUpperArm = {
       x: -left.forwardAngle,
       y: 0,
-      z: -(left.raisedHeight * (Math.PI / 2)),
+      z: left.sideRaiseAngle,
     };
     pose.LeftLowerArm = { x: -toRad(180 - left.elbowAngle), y: 0, z: 0 };
   }
@@ -66,7 +71,7 @@ export function armStateToRigRotations(
     pose.RightUpperArm = {
       x: -right.forwardAngle,
       y: 0,
-      z: right.raisedHeight * (Math.PI / 2),
+      z: right.sideRaiseAngle,
     };
     pose.RightLowerArm = { x: -toRad(180 - right.elbowAngle), y: 0, z: 0 };
   }
@@ -140,4 +145,105 @@ export function resetRigRotations(bones: AvatarBones): void {
 // -------------------------------------------------------------------------
 export function landmarksToBoneRotations(_landmarks: PoseLandmark[]): RigRotations {
   return { pose: {} };
+}
+
+// -------------------------------------------------------------------------
+// Finger rigging — maps MediaPipe's 21-landmark hand output to per-finger
+// joint rotations on the avatar. Each finger has 3 bones (Proximal,
+// Intermediate, Distal) and MediaPipe gives us 4 landmarks down the chain
+// (base → MCP → PIP → DIP → TIP), letting us derive a bend angle at each
+// joint via sliding 3-tuples.
+// -------------------------------------------------------------------------
+
+// MediaPipe Hand landmark indices, one entry per finger. Each chain is
+// [base, MCP, PIP, DIP, TIP]. For the thumb the names differ (CMC, MCP, IP)
+// but the same sliding-window geometry applies.
+const HAND_FINGER_CHAINS: Array<{
+  name: "Thumb" | "Index" | "Middle" | "Ring" | "Little";
+  chain: [number, number, number, number, number];
+}> = [
+  { name: "Thumb", chain: [0, 1, 2, 3, 4] },
+  { name: "Index", chain: [0, 5, 6, 7, 8] },
+  { name: "Middle", chain: [0, 9, 10, 11, 12] },
+  { name: "Ring", chain: [0, 13, 14, 15, 16] },
+  { name: "Little", chain: [0, 17, 18, 19, 20] },
+];
+
+/**
+ * Convert a single hand's 21 MediaPipe landmarks into per-finger joint
+ * rotations for my avatar's rig.
+ *
+ * For each finger we compute three bend angles from sliding 3-point windows:
+ *   Proximal bend  = 180° − ∠(base, MCP, PIP)
+ *   Intermediate   = 180° − ∠(MCP, PIP, DIP)
+ *   Distal         = 180° − ∠(PIP, DIP, TIP)
+ *
+ * Each bend drives the corresponding bone's local X rotation (same sign
+ * convention as the elbow — negative x = curl forward, toward the palm).
+ */
+export function handLandmarksToFingerRig(
+  side: "Left" | "Right",
+  landmarks: PoseLandmark[] | null
+): Partial<Record<HumanoidBoneName, BoneRotation>> {
+  const out: Partial<Record<HumanoidBoneName, BoneRotation>> = {};
+  if (!landmarks || landmarks.length < 21) return out;
+
+  // Hand bone rotation — approximate wrist pitch + yaw from the wrist-to-
+  // middle-MCP vector (the hand's "forward" axis). When fingers hang down
+  // (default rest pose) this vector points in +y image direction; rotating
+  // the wrist to point fingers forward/sideways rotates this vector, which
+  // we translate into Hand bone rotations.
+  const wrist = landmarks[0];
+  const middleMcp = landmarks[9];
+  if (wrist && middleMcp) {
+    const dx = middleMcp.x - wrist.x;
+    const dy = middleMcp.y - wrist.y;
+    const dz = middleMcp.z - wrist.z;
+    const safeDy = Math.max(dy, 0.01);
+    // pitch: fingers forward (dz < 0) → negative x rotation (hand tips forward)
+    const pitch = Math.atan2(-dz, safeDy);
+    // yaw: fingers to the side → z rotation (hand rolls)
+    const yaw = Math.atan2(dx, safeDy);
+    const handName = `${side}Hand` as HumanoidBoneName;
+    out[handName] = { x: -pitch, y: 0, z: yaw };
+  }
+
+  for (const { name, chain } of HAND_FINGER_CHAINS) {
+    const joints: Array<[
+      "Proximal" | "Intermediate" | "Distal",
+      number,
+      number,
+      number
+    ]> = [
+      ["Proximal", chain[0], chain[1], chain[2]],
+      ["Intermediate", chain[1], chain[2], chain[3]],
+      ["Distal", chain[2], chain[3], chain[4]],
+    ];
+
+    for (const [role, a, b, c] of joints) {
+      const pa = landmarks[a];
+      const pb = landmarks[b];
+      const pc = landmarks[c];
+      if (!pa || !pb || !pc) continue;
+
+      // 3D is fine for hand landmarks — MediaPipe Hand's z is wrist-relative
+      // and much more reliable than body pseudo-z.
+      const ab = { x: pa.x - pb.x, y: pa.y - pb.y, z: pa.z - pb.z };
+      const cb = { x: pc.x - pb.x, y: pc.y - pb.y, z: pc.z - pb.z };
+      const dot = ab.x * cb.x + ab.y * cb.y + ab.z * cb.z;
+      const magAB = Math.hypot(ab.x, ab.y, ab.z);
+      const magCB = Math.hypot(cb.x, cb.y, cb.z);
+      if (magAB === 0 || magCB === 0) continue;
+
+      const angleRad = Math.acos(
+        Math.max(-1, Math.min(1, dot / (magAB * magCB)))
+      );
+      // bend: 0 when finger is straight (angle=π), positive as it curls
+      const bend = Math.PI - angleRad;
+      const boneName = `${side}${name}${role}` as HumanoidBoneName;
+      out[boneName] = { x: -bend, y: 0, z: 0 };
+    }
+  }
+
+  return out;
 }
