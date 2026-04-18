@@ -6,7 +6,7 @@ import { useBodyDetection } from "@/hooks/useBodyDetection";
 function DebugPanel() {
   const { leftArm, rightArm, leftHand, rightHand, fps, isReady } = useBodyDetection();
   return (
-    <pre style={{ fontFamily: "monospace", fontSize: 13, padding: 24 }}>
+    <pre style={{ fontFamily: "monospace", fontSize: 13, padding: 24, color: "#00ff00", background: "#000", minHeight: "100dvh" }}>
       {`isReady: ${isReady}   fps: ${fps}\n\n`}
       {`LEFT ARM:\n`}
       {leftArm
