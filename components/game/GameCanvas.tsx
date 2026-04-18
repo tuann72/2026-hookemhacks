@@ -4,18 +4,24 @@ import { Canvas } from "@react-three/fiber";
 import { Environment, OrbitControls, Stats } from "@react-three/drei";
 import { Suspense } from "react";
 import { World } from "./World";
-import { Avatar } from "./Avatar";
+import { Avatar, type AvatarComponent } from "./Avatar";
 import { useGameStore } from "@/lib/store/gameStore";
 import { PLAYER_SLOTS } from "@/lib/game/sportLayout";
 
 interface GameCanvasProps {
   debug?: boolean;
+  /**
+   * Swap the avatar implementation (e.g. a teammate's GLTF/VRM model). Must
+   * implement `AvatarComponent` — see Avatar.tsx and CustomAvatar.tsx for
+   * the contract. Defaults to the built-in blocky humanoid.
+   */
+  AvatarComponent?: AvatarComponent;
 }
 
 // R3F scene root. Owns camera, lighting rig, and mounts the World + Avatars.
 // Kept purely presentational — all state lives in Zustand.
 
-export function GameCanvas({ debug = false }: GameCanvasProps) {
+export function GameCanvas({ debug = false, AvatarComponent = Avatar }: GameCanvasProps) {
   const sport = useGameStore((s) => s.sport);
   const players = useGameStore((s) => s.players);
   const slots = PLAYER_SLOTS[sport];
@@ -39,7 +45,7 @@ export function GameCanvas({ debug = false }: GameCanvasProps) {
           const slot = slots[i];
           if (!slot) return null;
           return (
-            <Avatar
+            <AvatarComponent
               key={p.id}
               playerId={p.id}
               position={slot.position}

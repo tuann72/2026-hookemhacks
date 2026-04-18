@@ -17,11 +17,19 @@ import { applyRigRotations, type AvatarBones } from "@/lib/rigging";
 // so wiring real pose data is `applyRigRotations(bones, rig)` with zero name
 // remapping. See HOOKEMHACKS_CONTEXT.md — "Pose Data Flow".
 
-interface AvatarProps {
+/**
+ * Shared avatar component contract. Any drop-in avatar (GLTF model, VRM,
+ * custom mesh) should implement `AvatarComponent` so `GameCanvas` can swap
+ * it without further changes. See components/game/CustomAvatar.tsx for a
+ * GLTF skeleton-mapping example.
+ */
+export interface AvatarProps {
   playerId: PlayerId;
   position?: [number, number, number];
   rotationY?: number;
 }
+
+export type AvatarComponent = (props: AvatarProps) => React.ReactElement | null;
 
 // --- Rig proportions (meters) ---------------------------------------------
 const HIPS_Y = 1.0;

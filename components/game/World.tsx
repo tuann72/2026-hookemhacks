@@ -247,30 +247,46 @@ function PalmTree({
         );
       })}
 
-      {/* Fronds — 6 elongated diamonds arranged in a star around the top */}
+      {/* Crown — 8 broad flat leaves arcing outward from the top, each
+          drooping toward the tip so the whole canopy reads as a proper
+          palm fan instead of a spike ring */}
       <group position={[0, height, 0]}>
-        {Array.from({ length: 6 }).map((_, i) => {
-          const angle = (i / 6) * Math.PI * 2;
-          const droop = -0.25;
+        {Array.from({ length: 8 }).map((_, i) => {
+          const angle = (i / 8) * Math.PI * 2;
+          const tilt = -0.55; // droop downward
+          const len = 1.4 + (i % 2) * 0.25; // slight length variation
           return (
-            <mesh
-              key={i}
-              rotation={[droop, angle, 0]}
-              position={[0, 0, 0]}
-              castShadow
-            >
-              <coneGeometry args={[0.32, 1.6, 4]} />
-              <meshStandardMaterial color={COLOR_FROND} roughness={0.85} />
-            </mesh>
+            <group key={i} rotation={[0, angle, 0]}>
+              <mesh
+                position={[len / 2, -0.05, 0]}
+                rotation={[0, 0, tilt]}
+                castShadow
+              >
+                {/* flat wide leaf — long box, thin, tapered visual via scale */}
+                <boxGeometry args={[len, 0.04, 0.32]} />
+                <meshStandardMaterial
+                  color={COLOR_FROND}
+                  roughness={0.8}
+                />
+              </mesh>
+            </group>
           );
         })}
       </group>
 
-      {/* Coconut cluster near the crown */}
-      <mesh position={[0, height - 0.1, 0]} castShadow>
-        <sphereGeometry args={[0.14, 10, 10]} />
-        <meshStandardMaterial color="#3C2418" roughness={0.7} />
-      </mesh>
+      {/* Coconut cluster just below the crown */}
+      <group position={[0, height - 0.15, 0]}>
+        {[
+          [0.12, 0, 0.06],
+          [-0.1, -0.04, 0.08],
+          [0.04, -0.08, -0.12],
+        ].map((p, i) => (
+          <mesh key={i} position={p as [number, number, number]} castShadow>
+            <sphereGeometry args={[0.09, 10, 10]} />
+            <meshStandardMaterial color="#3C2418" roughness={0.7} />
+          </mesh>
+        ))}
+      </group>
     </group>
   );
 }
