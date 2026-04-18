@@ -2,7 +2,10 @@ import { supabase } from "@/lib/supabase/client";
 import type { Room, RoomPlayer } from "./types";
 
 function generateCode(): string {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let code = "";
+  for (let i = 0; i < 4; i++) code += letters[Math.floor(Math.random() * 26)];
+  return code;
 }
 
 export async function createRoom(hostId: string): Promise<Room> {
@@ -94,6 +97,17 @@ export async function startGame(roomId: string, hostId: string): Promise<void> {
     .eq("status", "waiting");
 
   if (error) throw error;
+}
+
+export async function getRoomByCode(code: string): Promise<Room | null> {
+  const { data, error } = await supabase
+    .from("rooms")
+    .select()
+    .eq("code", code.toUpperCase())
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
 }
 
 export async function getRoom(roomId: string): Promise<Room> {

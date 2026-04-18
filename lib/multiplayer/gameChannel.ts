@@ -6,12 +6,14 @@ import type {
   HitEvent,
   GameEvent,
   PlayerPresence,
+  PoseSnapshot,
 } from "./types";
 
 type PlayerStateHandler = (state: PlayerState) => void;
 type AttackHandler = (attack: AttackEvent) => void;
 type HitHandler = (hit: HitEvent) => void;
 type GameEventHandler = (event: GameEvent) => void;
+type PoseSnapshotHandler = (snapshot: PoseSnapshot) => void;
 type PresenceHandler = (players: PlayerPresence[]) => void;
 
 export class GameChannel {
@@ -37,10 +39,17 @@ export class GameChannel {
     onAttack?: AttackHandler;
     onHit?: HitHandler;
     onGameEvent?: GameEventHandler;
+    onPoseSnapshot?: PoseSnapshotHandler;
     onPresenceChange?: PresenceHandler;
   }): Promise<void> {
-    const { onPlayerState, onAttack, onHit, onGameEvent, onPresenceChange } =
-      handlers;
+    const {
+      onPlayerState,
+      onAttack,
+      onHit,
+      onGameEvent,
+      onPoseSnapshot,
+      onPresenceChange,
+    } = handlers;
 
     if (onPlayerState) {
       this.channel.on("broadcast", { event: "player_state" }, ({ payload }) =>
@@ -66,10 +75,29 @@ export class GameChannel {
       );
     }
 
+    if (onPoseSnapshot) {
+      this.channel.on("broadcast", { event: "pose" }, ({ payload }) =>
+        onPoseSnapshot(payload as PoseSnapshot)
+      );
+    }
+
     if (onPresenceChange) {
       this.channel.on("presence", { event: "sync" }, () => {
         const state = this.channel.presenceState<PlayerPresence>();
-        const players = Object.values(state).flat();
+        // Presence stores one array per key (= per player). Multiple entries
+        // in the array mean multiple live connections for the same player
+        // (dev StrictMode remount, reconnect, two tabs) — collapse to one.
+        const players: PlayerPresence[] = [];
+        for (const entries of Object.values(state)) {
+          const first = entries[0];
+          if (first) {
+            players.push({
+              playerId: first.playerId,
+              name: first.name,
+              onlineAt: first.onlineAt,
+            });
+          }
+        }
         onPresenceChange(players);
       });
     }
@@ -133,6 +161,22 @@ export class GameChannel {
         ...event,
         timestamp: performance.now(),
       } satisfies GameEvent,
+    });
+  }
+
+  // Fire-and-forget pose frame. Expect callers to throttle (~15 Hz) — this
+  // method itself does not rate-limit.
+  broadcastPoseSnapshot(
+    snapshot: Omit<PoseSnapshot, "playerId" | "timestamp">,
+  ): void {
+    this.channel.send({
+      type: "broadcast",
+      event: "pose",
+      payload: {
+        ...snapshot,
+        playerId: this.playerId,
+        timestamp: performance.now(),
+      } satisfies PoseSnapshot,
     });
   }
 

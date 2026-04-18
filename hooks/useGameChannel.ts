@@ -8,6 +8,7 @@ import type {
   HitEvent,
   GameEvent,
   PlayerPresence,
+  PoseSnapshot,
 } from "@/lib/multiplayer/types";
 
 interface UseGameChannelOptions {
@@ -18,6 +19,7 @@ interface UseGameChannelOptions {
   onAttack?: (attack: AttackEvent) => void;
   onHit?: (hit: HitEvent) => void;
   onGameEvent?: (event: GameEvent) => void;
+  onPoseSnapshot?: (snapshot: PoseSnapshot) => void;
 }
 
 export function useGameChannel({
@@ -28,6 +30,7 @@ export function useGameChannel({
   onAttack,
   onHit,
   onGameEvent,
+  onPoseSnapshot,
 }: UseGameChannelOptions) {
   const channelRef = useRef<GameChannel | null>(null);
   const [connected, setConnected] = useState(false);
@@ -38,11 +41,13 @@ export function useGameChannel({
   const onAttackRef = useRef(onAttack);
   const onHitRef = useRef(onHit);
   const onGameEventRef = useRef(onGameEvent);
+  const onPoseSnapshotRef = useRef(onPoseSnapshot);
 
   useEffect(() => { onPlayerStateRef.current = onPlayerState; }, [onPlayerState]);
   useEffect(() => { onAttackRef.current = onAttack; }, [onAttack]);
   useEffect(() => { onHitRef.current = onHit; }, [onHit]);
   useEffect(() => { onGameEventRef.current = onGameEvent; }, [onGameEvent]);
+  useEffect(() => { onPoseSnapshotRef.current = onPoseSnapshot; }, [onPoseSnapshot]);
 
   useEffect(() => {
     if (!roomId || !playerId) return;
@@ -56,6 +61,7 @@ export function useGameChannel({
         onAttack: (a) => onAttackRef.current?.(a),
         onHit: (h) => onHitRef.current?.(h),
         onGameEvent: (e) => onGameEventRef.current?.(e),
+        onPoseSnapshot: (p) => onPoseSnapshotRef.current?.(p),
         onPresenceChange: setPlayers,
       })
       .then(() => setConnected(true))
@@ -92,6 +98,13 @@ export function useGameChannel({
     []
   );
 
+  const broadcastPoseSnapshot = useCallback(
+    (snapshot: Omit<PoseSnapshot, "playerId" | "timestamp">) => {
+      channelRef.current?.broadcastPoseSnapshot(snapshot);
+    },
+    []
+  );
+
   return {
     connected,
     players,
@@ -99,5 +112,6 @@ export function useGameChannel({
     broadcastAttack,
     broadcastHit,
     broadcastGameEvent,
+    broadcastPoseSnapshot,
   };
 }
