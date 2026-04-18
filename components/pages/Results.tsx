@@ -4,14 +4,14 @@ import { BRAND } from "../shared/constants";
 import type { ScoreLevel } from "../shared/types";
 
 const RESULT_PLAYERS = [
-  { name: "You", tag: "P1", you: true as const, delta: "+2", deltaUp: true as const },
-  { name: "Mango Molly", tag: "P2", delta: "-1", deltaUp: false as const },
-  { name: "Coral Kai", tag: "P3", delta: "+0", deltaUp: true as const },
-  { name: "Lavafoot", tag: "P4", delta: "-1", deltaUp: false as const },
-  { name: "Reef Rae", tag: "P5", delta: "+1", deltaUp: true as const },
-  { name: "Sunny Steve", tag: "P6", delta: "-1", deltaUp: false as const },
-  { name: "Palm Pete", tag: "P7", delta: "+0", deltaUp: true as const },
-  { name: "Tiki Tomi", tag: "P8", delta: "+0", deltaUp: true as const },
+  { name: "You",         tag: "P1", you: true  as const, delta: "+2", deltaUp: true  as const },
+  { name: "Mango Molly", tag: "P2", you: false as const, delta: "-1", deltaUp: false as const },
+  { name: "Coral Kai",   tag: "P3", you: false as const, delta: "+0", deltaUp: true  as const },
+  { name: "Lavafoot",    tag: "P4", you: false as const, delta: "-1", deltaUp: false as const },
+  { name: "Reef Rae",    tag: "P5", you: false as const, delta: "+1", deltaUp: true  as const },
+  { name: "Sunny Steve", tag: "P6", you: false as const, delta: "-1", deltaUp: false as const },
+  { name: "Palm Pete",   tag: "P7", you: false as const, delta: "+0", deltaUp: true  as const },
+  { name: "Tiki Tomi",   tag: "P8", you: false as const, delta: "+0", deltaUp: true  as const },
 ] as const;
 
 const RESULT_COLORS = [
