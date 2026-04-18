@@ -7,14 +7,26 @@ import type { Sport } from "@/types";
 import { SwordArena } from "./props/SwordArena";
 import { TennisCourt } from "./props/TennisCourt";
 import { GolfGreen } from "./props/GolfGreen";
+import { BoxingRing } from "./props/BoxingRing";
+
+// Tropical-sunset arena — matches the landing-UI aesthetic (volcano, ocean,
+// palms, warm sky) instead of the old neon concrete arena. Sport props still
+// swap on top so each game zone feels distinct.
 
 interface WorldProps {
   sport: Sport;
 }
 
-// A neon-lit arena shell that swaps its court prop based on the active sport.
-// Arena geometry (floor, walls, pulsing lights) stays constant so sport changes
-// feel like zone swaps, not full scene reloads.
+const COLOR_SAND = "#FFE5B4";
+const COLOR_SAND_WARM = "#F5C978";
+const COLOR_SUN = "#FF6B4A";
+const COLOR_LAVA = "#FF3D1F";
+const COLOR_VOLCANO = "#3A2E4C";
+const COLOR_VOLCANO_DEEP = "#261E35";
+const COLOR_OCEAN = "#1F4C6B";
+const COLOR_OCEAN_LIGHT = "#3A7C9C";
+const COLOR_PALM_TRUNK = "#5A3E2A";
+const COLOR_FROND = "#2E6E3B";
 
 export function World({ sport }: WorldProps) {
   return (
@@ -26,132 +38,239 @@ export function World({ sport }: WorldProps) {
 }
 
 function ArenaShell() {
-  const neonA = useRef<Mesh>(null);
-  const neonB = useRef<Mesh>(null);
-  const neonC = useRef<Mesh>(null);
-
-  useFrame((state) => {
-    const t = state.clock.elapsedTime;
-    // Subtle neon breathing — keeps the arena feeling alive without distraction.
-    const pulse = (phase: number) => 1.4 + Math.sin(t * 1.6 + phase) * 0.25;
-    if (neonA.current) {
-      const m = neonA.current.material as { emissiveIntensity?: number };
-      if (m.emissiveIntensity !== undefined) m.emissiveIntensity = pulse(0);
-    }
-    if (neonB.current) {
-      const m = neonB.current.material as { emissiveIntensity?: number };
-      if (m.emissiveIntensity !== undefined) m.emissiveIntensity = pulse(2.1);
-    }
-    if (neonC.current) {
-      const m = neonC.current.material as { emissiveIntensity?: number };
-      if (m.emissiveIntensity !== undefined) m.emissiveIntensity = pulse(4.2);
-    }
-  });
-
   return (
     <group>
-      {/* arena floor (outside the sport zone) — dark polished concrete */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
-        <planeGeometry args={[40, 40]} />
-        <meshStandardMaterial color="#0b0f1a" roughness={0.35} metalness={0.4} />
+      {/* Sand floor — large enough to fill the camera-framed ground plane */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+        <planeGeometry args={[60, 60]} />
+        <meshStandardMaterial color={COLOR_SAND} roughness={1.0} />
       </mesh>
 
-      {/* back wall */}
-      <mesh position={[0, 5, -12]} receiveShadow>
-        <boxGeometry args={[40, 10, 0.4]} />
-        <meshStandardMaterial color="#111827" roughness={0.9} />
+      {/* Wet-sand strip near the water (darker warm) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, -10]}>
+        <planeGeometry args={[60, 4]} />
+        <meshStandardMaterial color={COLOR_SAND_WARM} roughness={1.0} />
       </mesh>
 
-      {/* side walls */}
-      <mesh position={[-14, 5, 0]} receiveShadow>
-        <boxGeometry args={[0.4, 10, 30]} />
-        <meshStandardMaterial color="#111827" roughness={0.9} />
-      </mesh>
-      <mesh position={[14, 5, 0]} receiveShadow>
-        <boxGeometry args={[0.4, 10, 30]} />
-        <meshStandardMaterial color="#111827" roughness={0.9} />
-      </mesh>
+      {/* Ocean — wide flat plane behind the beach, gently animated */}
+      <Ocean />
 
-      {/* neon accent strips on back wall */}
-      <mesh ref={neonA} position={[-6, 7, -11.75]}>
-        <boxGeometry args={[8, 0.12, 0.05]} />
-        <meshStandardMaterial
-          color="#22d3ee"
-          emissive="#22d3ee"
-          emissiveIntensity={1.4}
-          toneMapped={false}
-        />
-      </mesh>
-      <mesh ref={neonB} position={[6, 7, -11.75]}>
-        <boxGeometry args={[8, 0.12, 0.05]} />
-        <meshStandardMaterial
-          color="#a855f7"
-          emissive="#a855f7"
-          emissiveIntensity={1.4}
-          toneMapped={false}
-        />
-      </mesh>
-      <mesh ref={neonC} position={[0, 2.5, -11.75]}>
-        <boxGeometry args={[18, 0.08, 0.05]} />
-        <meshStandardMaterial
-          color="#f97316"
-          emissive="#f97316"
-          emissiveIntensity={1.4}
-          toneMapped={false}
-        />
-      </mesh>
+      {/* Sky dome — inverted sphere with a vertical gradient painted on the
+          inside via vertex color. Simpler than HDRI and matches the landing
+          gradient (warm peach at the top through coral, crimson at the
+          horizon where it meets the ocean). */}
+      <SkyDome />
 
-      {/* ceiling rigging bar with clamp-on lights (just geometric suggestion) */}
-      <mesh position={[0, 9.5, -4]}>
-        <boxGeometry args={[24, 0.1, 0.1]} />
-        <meshStandardMaterial color="#1f2937" metalness={0.8} roughness={0.4} />
-      </mesh>
-      <CrowdRibbon side="left" />
-      <CrowdRibbon side="right" />
+      {/* Sun disc at the horizon — emissive ball with a bloom-ish halo via
+          scale-and-transparent shell */}
+      <Sun />
+
+      {/* Main volcano — a truncated cone centered-back with lava glow at the
+          crater, per the landing backdrop */}
+      <Volcano position={[2, 0, -22]} height={10} baseRadius={7} />
+      {/* Smaller background volcano for depth */}
+      <Volcano
+        position={[-9, 0, -26]}
+        height={6}
+        baseRadius={4.5}
+        color={COLOR_VOLCANO_DEEP}
+        hasLava={false}
+      />
+
+      {/* Palm trees lining the beach on both sides */}
+      <PalmCluster side="left" />
+      <PalmCluster side="right" />
     </group>
   );
 }
 
-function CrowdRibbon({ side }: { side: "left" | "right" }) {
-  // Cheap crowd stand-in: a ribbon of low-poly "heads" at a raked angle.
-  const root = useRef<Group>(null);
-  const count = 40;
-  const xSign = side === "left" ? -1 : 1;
-
-  const positions = useMemo(() => {
-    const pts: [number, number, number][] = [];
-    for (let i = 0; i < count; i++) {
-      const row = i % 5;
-      const col = Math.floor(i / 5);
-      pts.push([
-        xSign * (8 + row * 0.5),
-        1.8 + row * 0.45,
-        -8 + col * 2.1,
-      ]);
-    }
-    return pts;
-  }, [xSign]);
-
+function Ocean() {
+  const ref = useRef<Mesh>(null);
   useFrame((state) => {
-    if (!root.current) return;
-    // faint bob — the crowd is "into it"
+    if (!ref.current) return;
+    // Gentle horizontal drift for subtle water motion
     const t = state.clock.elapsedTime;
-    root.current.children.forEach((child, i) => {
-      child.position.y = positions[i][1] + Math.sin(t * 2 + i * 0.7) * 0.04;
-    });
+    ref.current.position.x = Math.sin(t * 0.18) * 0.6;
   });
-
   return (
-    <group ref={root}>
-      {positions.map((p, i) => (
-        <mesh key={i} position={p}>
-          <sphereGeometry args={[0.18, 10, 10]} />
+    <group>
+      {/* Deep ocean (far) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, -18]}>
+        <planeGeometry args={[120, 18]} />
+        <meshStandardMaterial color={COLOR_OCEAN} roughness={0.6} metalness={0.3} />
+      </mesh>
+      {/* Shore water (closer, lighter, drifting) */}
+      <mesh
+        ref={ref}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0.01, -11]}
+      >
+        <planeGeometry args={[60, 3]} />
+        <meshStandardMaterial
+          color={COLOR_OCEAN_LIGHT}
+          transparent
+          opacity={0.75}
+          roughness={0.4}
+          metalness={0.4}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+function SkyDome() {
+  // Hemisphere behind everything. Single flat color per sphere; we stack two
+  // spheres (outer = high sky, inner clipped to lower = ocean band) for a
+  // simple gradient feel.
+  return (
+    <group>
+      <mesh position={[0, 0, 0]}>
+        <sphereGeometry args={[80, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshBasicMaterial color="#FFB384" side={2} />
+      </mesh>
+      <mesh position={[0, 0, 0]}>
+        <sphereGeometry args={[79.5, 32, 16, 0, Math.PI * 2, Math.PI / 3, Math.PI / 6]} />
+        <meshBasicMaterial color="#FF9764" side={2} transparent opacity={0.75} />
+      </mesh>
+    </group>
+  );
+}
+
+function Sun() {
+  return (
+    <group position={[6, 6, -25]}>
+      {/* Halo */}
+      <mesh>
+        <sphereGeometry args={[3.2, 24, 24]} />
+        <meshBasicMaterial color={COLOR_SUN} transparent opacity={0.22} toneMapped={false} />
+      </mesh>
+      {/* Disc */}
+      <mesh>
+        <sphereGeometry args={[1.8, 24, 24]} />
+        <meshBasicMaterial color="#FFD88A" toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
+interface VolcanoProps {
+  position: [number, number, number];
+  height: number;
+  baseRadius: number;
+  color?: string;
+  hasLava?: boolean;
+}
+
+function Volcano({
+  position,
+  height,
+  baseRadius,
+  color = COLOR_VOLCANO,
+  hasLava = true,
+}: VolcanoProps) {
+  const lavaRef = useRef<Mesh>(null);
+  useFrame((state) => {
+    if (!lavaRef.current) return;
+    const t = state.clock.elapsedTime;
+    const m = lavaRef.current.material as { emissiveIntensity?: number };
+    if (m.emissiveIntensity !== undefined) {
+      m.emissiveIntensity = 1.4 + Math.sin(t * 2.0) * 0.3;
+    }
+  });
+  const topRadius = baseRadius * 0.25;
+  return (
+    <group position={position}>
+      <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+        <coneGeometry args={[baseRadius, height, 20, 1, true]} />
+        <meshStandardMaterial color={color} roughness={0.95} />
+      </mesh>
+      {hasLava && (
+        <mesh ref={lavaRef} position={[0, height + 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[topRadius, 20]} />
           <meshStandardMaterial
-            color={i % 3 === 0 ? "#334155" : i % 3 === 1 ? "#475569" : "#1e293b"}
-            roughness={0.9}
+            color={COLOR_LAVA}
+            emissive={COLOR_LAVA}
+            emissiveIntensity={1.4}
+            toneMapped={false}
           />
         </mesh>
+      )}
+    </group>
+  );
+}
+
+function PalmCluster({ side }: { side: "left" | "right" }) {
+  const sign = side === "left" ? -1 : 1;
+  // Staggered palm positions — lined along the beach, angled slightly so each
+  // tree reads as individual even from the player's fixed camera.
+  const palms = useMemo(
+    () =>
+      [
+        { x: sign * 9, z: -2, height: 3.2, lean: 0.08 },
+        { x: sign * 11, z: -6, height: 3.8, lean: -0.06 },
+        { x: sign * 8, z: 2, height: 2.8, lean: 0.12 },
+        { x: sign * 12, z: -12, height: 3.5, lean: 0.04 },
+      ] as const,
+    [sign],
+  );
+  return (
+    <group>
+      {palms.map((p, i) => (
+        <PalmTree key={i} position={[p.x, 0, p.z]} height={p.height} lean={p.lean * sign} />
       ))}
+    </group>
+  );
+}
+
+function PalmTree({
+  position,
+  height,
+  lean,
+}: {
+  position: [number, number, number];
+  height: number;
+  lean: number;
+}) {
+  const trunkSegments = 4;
+  const trunkWidth = 0.14;
+  return (
+    <group position={position} rotation={[0, 0, lean]}>
+      {/* Trunk — segmented cylinder sections for a palm-like profile */}
+      {Array.from({ length: trunkSegments }).map((_, i) => {
+        const y = (height / trunkSegments) * (i + 0.5);
+        const r = trunkWidth * (1 - i * 0.08);
+        return (
+          <mesh key={i} position={[0, y, 0]} castShadow>
+            <cylinderGeometry args={[r * 0.9, r, height / trunkSegments, 10]} />
+            <meshStandardMaterial color={COLOR_PALM_TRUNK} roughness={0.95} />
+          </mesh>
+        );
+      })}
+
+      {/* Fronds — 6 elongated diamonds arranged in a star around the top */}
+      <group position={[0, height, 0]}>
+        {Array.from({ length: 6 }).map((_, i) => {
+          const angle = (i / 6) * Math.PI * 2;
+          const droop = -0.25;
+          return (
+            <mesh
+              key={i}
+              rotation={[droop, angle, 0]}
+              position={[0, 0, 0]}
+              castShadow
+            >
+              <coneGeometry args={[0.32, 1.6, 4]} />
+              <meshStandardMaterial color={COLOR_FROND} roughness={0.85} />
+            </mesh>
+          );
+        })}
+      </group>
+
+      {/* Coconut cluster near the crown */}
+      <mesh position={[0, height - 0.1, 0]} castShadow>
+        <sphereGeometry args={[0.14, 10, 10]} />
+        <meshStandardMaterial color="#3C2418" roughness={0.7} />
+      </mesh>
     </group>
   );
 }
@@ -164,5 +283,7 @@ function SportZone({ sport }: { sport: Sport }) {
       return <TennisCourt />;
     case "golf":
       return <GolfGreen />;
+    case "boxing":
+      return <BoxingRing />;
   }
 }

@@ -101,7 +101,7 @@ export interface RigRotations {
   rightHand?: Record<string, unknown>;
 }
 
-export type Sport = "swords" | "tennis" | "golf";
+export type Sport = "swords" | "tennis" | "golf" | "boxing";
 
 export type GamePhase = "idle" | "countdown" | "playing" | "paused" | "ended";
 

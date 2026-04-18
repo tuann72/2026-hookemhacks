@@ -26,9 +26,11 @@ export function GameCanvas({ debug = false }: GameCanvasProps) {
       dpr={[1, 2]}
       gl={{ antialias: true, powerPreference: "high-performance" }}
       camera={{ position: [0, 3.5, 7.5], fov: 42, near: 0.1, far: 100 }}
-      style={{ background: "#050810" }}
+      style={{ background: "#FF9764" }}
     >
-      <fog attach="fog" args={["#050810", 12, 32]} />
+      {/* Warm peach haze — softens the distant ocean/volcano and matches
+          the landing UI's sunset sky */}
+      <fog attach="fog" args={["#FFB384", 18, 50]} />
 
       <Suspense fallback={null}>
         <Lights />
@@ -45,7 +47,7 @@ export function GameCanvas({ debug = false }: GameCanvasProps) {
             />
           );
         })}
-        <Environment preset="night" />
+        <Environment preset="sunset" />
       </Suspense>
 
       <OrbitControls
@@ -63,24 +65,19 @@ export function GameCanvas({ debug = false }: GameCanvasProps) {
 function Lights() {
   return (
     <>
-      <ambientLight intensity={0.25} color="#6366f1" />
-      <spotLight
-        position={[6, 8, 4]}
-        intensity={2.2}
-        angle={0.6}
-        penumbra={0.4}
-        color="#fbbf24"
+      {/* Warm tropical ambient — cream, lifts the sand into a sunlit beach */}
+      <ambientLight intensity={0.6} color="#FFE5B4" />
+      {/* Sun — warm directional from upper-right matching the Sun disc in
+          World.tsx at [6, 6, -25]. Casts shadows for anchor ground contact. */}
+      <directionalLight
+        position={[10, 12, -10]}
+        intensity={1.6}
+        color="#FFD88A"
         castShadow
         shadow-mapSize={[1024, 1024]}
       />
-      <spotLight
-        position={[-6, 8, 4]}
-        intensity={1.2}
-        angle={0.6}
-        penumbra={0.4}
-        color="#38bdf8"
-      />
-      <directionalLight position={[0, 6, -8]} intensity={0.6} color="#a855f7" />
+      {/* Soft sunset fill from the horizon side — coral bounce off the sand */}
+      <directionalLight position={[-8, 3, -12]} intensity={0.5} color="#FF6B4A" />
     </>
   );
 }

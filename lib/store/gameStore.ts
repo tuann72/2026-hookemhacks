@@ -41,7 +41,7 @@ const initialPlayers: Player[] = [
 ];
 
 const initial = {
-  sport: "swords" as Sport,
+  sport: "boxing" as Sport,
   phase: "idle" as GamePhase,
   events: [] as GameEvent[],
   elapsedMs: 0,
