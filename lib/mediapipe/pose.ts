@@ -53,10 +53,10 @@ export function processFrame(video: HTMLVideoElement, timestamp: number): RawPos
   let rightHandLandmarks: NormalizedLandmark[] | null = null;
 
   handResult.handedness.forEach((handedness, i) => {
-    // MediaPipe labels are from the model's perspective (mirrored), so "Left" = user's right
+    // MediaPipe hand labels are from the model's perspective — swapped to match mirrored display
     const label = handedness[0]?.categoryName;
-    if (label === "Left") rightHandLandmarks = handResult.landmarks[i];
-    else if (label === "Right") leftHandLandmarks = handResult.landmarks[i];
+    if (label === "Left") leftHandLandmarks = handResult.landmarks[i];
+    else if (label === "Right") rightHandLandmarks = handResult.landmarks[i];
   });
 
   return {
