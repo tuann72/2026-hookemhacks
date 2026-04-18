@@ -121,16 +121,18 @@ export function Avatar({
     // Relaxed arm-down idle with a gentle breathing sway. z-rotation near 0
     // keeps arms hanging; a small positive value tilts them slightly out so
     // they clear the torso visually.
-    // Minecraft Steve idle — arms hang straight down by the sides. Tiny
-    // forward/back swing for a sign of life; zero z-tilt keeps them pinned
-    // against the torso line. CV will overwrite these.
+    // Minecraft Steve idle — arms hang straight down by the sides with an
+    // opposing forward/back swing so it reads like a gentle march. The two
+    // arms mirror (opposite phase) which is the natural human gait.
+    // CV will overwrite these via applyRigRotations.
+    const armSwing = Math.sin(t * 1.6) * 0.35;
     if (b.LeftUpperArm) {
       b.LeftUpperArm.rotation.z = 0;
-      b.LeftUpperArm.rotation.x = Math.sin(t * 1.2) * 0.04;
+      b.LeftUpperArm.rotation.x = armSwing;
     }
     if (b.RightUpperArm) {
       b.RightUpperArm.rotation.z = 0;
-      b.RightUpperArm.rotation.x = -Math.sin(t * 1.2) * 0.04;
+      b.RightUpperArm.rotation.x = -armSwing;
     }
     if (b.LeftLowerArm) b.LeftLowerArm.rotation.x = 0;
     if (b.RightLowerArm) b.RightLowerArm.rotation.x = 0;

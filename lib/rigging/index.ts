@@ -51,12 +51,23 @@ export function armStateToRigRotations(
 ): RigRotations {
   const pose: Partial<Record<HumanoidBoneName, BoneRotation>> = {};
 
+  // UpperArm.x: forward/back swing. In my rig, negative x rotates arm forward
+  // in the character's local frame; ArmState.forwardAngle is positive when the
+  // user's arm is forward of the shoulder, so we flip the sign.
   if (left) {
-    pose.LeftUpperArm = { x: 0, y: 0, z: -(left.raisedHeight * (Math.PI / 2)) };
+    pose.LeftUpperArm = {
+      x: -left.forwardAngle,
+      y: 0,
+      z: -(left.raisedHeight * (Math.PI / 2)),
+    };
     pose.LeftLowerArm = { x: -toRad(180 - left.elbowAngle), y: 0, z: 0 };
   }
   if (right) {
-    pose.RightUpperArm = { x: 0, y: 0, z: right.raisedHeight * (Math.PI / 2) };
+    pose.RightUpperArm = {
+      x: -right.forwardAngle,
+      y: 0,
+      z: right.raisedHeight * (Math.PI / 2),
+    };
     pose.RightLowerArm = { x: -toRad(180 - right.elbowAngle), y: 0, z: 0 };
   }
 

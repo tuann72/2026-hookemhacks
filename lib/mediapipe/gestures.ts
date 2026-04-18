@@ -25,6 +25,20 @@ export function calcRaisedHeight(wrist: Vec3, shoulder: Vec3): number {
   return Math.max(0, Math.min(1, (shoulder.y - wrist.y) + 0.5));
 }
 
+/**
+ * Forward/back swing angle in the sagittal plane. MediaPipe Pose's z is
+ * relative to the hip — negative z = closer to camera. So wrist.z < shoulder.z
+ * means the wrist is in front of the shoulder (arm swung forward).
+ *
+ * Returns radians: 0 at rest (arm hangs straight), +π/2 fully forward,
+ * -π/2 fully backward.
+ */
+export function calcForwardAngle(wrist: Vec3, shoulder: Vec3): number {
+  const dy = wrist.y - shoulder.y; // positive when wrist below shoulder
+  const dz = wrist.z - shoulder.z; // negative when wrist forward of shoulder
+  return Math.atan2(-dz, Math.max(dy, 1e-4));
+}
+
 function fingerCurl(tip: NormalizedLandmark, pip: NormalizedLandmark, mcp: NormalizedLandmark): number {
   return calcAngle(tip, pip, mcp);
 }
@@ -71,10 +85,12 @@ export function buildArmState(
   const elbowAngle = calcAngle(shoulder, elbow, wrist);
   const swingSpeed = prevWrist ? calcSwingSpeed(prevWrist, wrist, dt) : 0;
   const raisedHeight = calcRaisedHeight(wrist, shoulder);
+  const forwardAngle = calcForwardAngle(wrist, shoulder);
   return {
     elbowAngle,
     swingSpeed,
     raisedHeight,
+    forwardAngle,
     isExtended: elbowAngle > 150,
   };
 }

@@ -146,6 +146,12 @@ export interface ArmState {
   elbowAngle: number;
   swingSpeed: number;
   raisedHeight: number;
+  /**
+   * Radians — forward/back arm swing in the sagittal plane. 0 = arm hangs
+   * straight down, +π/2 = arm pointed forward (toward camera), -π/2 = arm
+   * pointed backward. Computed from shoulder/wrist Y+Z deltas.
+   */
+  forwardAngle: number;
   isExtended: boolean;
 }
 
