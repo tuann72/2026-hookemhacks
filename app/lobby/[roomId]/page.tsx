@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Backdrop } from "@/components/scenery/Scenery";
 import { CalibrationPanel } from "@/components/pages/CalibrationPanel";
 import { BRAND } from "@/components/shared/constants";
+import BodyDetector from "@/components/detection/BodyDetector";
 
 const AVATAR_COLORS = ["#FF6B4A", "#2BB3C0", "#2E7D5B", "#FF5E7E", "#FFD24A", "#8A5EE0", "#4A90E2", "#E06B4A"];
 
@@ -140,7 +141,9 @@ export default function LobbyPage() {
 
         {/* ── Right: calibration ── */}
         <div className="lobby-cal card">
-          <CalibrationPanel onReady={() => setLocalReady(true)} />
+          <BodyDetector>
+            <CalibrationPanel onReady={() => setLocalReady(true)} />
+          </BodyDetector>
         </div>
       </div>
 

@@ -21,16 +21,20 @@ const HAND_CONNECTIONS: [number, number][] = [
 
 function drawDebugCanvas(
   ctx: CanvasRenderingContext2D,
-  video: HTMLVideoElement,
+  video: HTMLVideoElement | null,
   raw: RawPoseResult,
 ) {
   const { width, height } = ctx.canvas;
 
-  // Mirror + draw video frame
-  ctx.save();
-  ctx.scale(-1, 1);
-  ctx.drawImage(video, -width, 0, width, height);
-  ctx.restore();
+  if (video) {
+    // Mirror + draw video frame
+    ctx.save();
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, -width, 0, width, height);
+    ctx.restore();
+  } else {
+    ctx.clearRect(0, 0, width, height);
+  }
 
   const toX = (x: number) => (1 - x) * width; // mirrored
   const toY = (y: number) => y * height;
@@ -69,7 +73,12 @@ function drawDebugCanvas(
   }
 }
 
-const defaultState: BodyTrackingState = {
+type BodyTrackingContextValue = BodyTrackingState & {
+  videoRef: React.RefObject<HTMLVideoElement | null> | null;
+  overlayCanvasRef: React.RefObject<HTMLCanvasElement | null> | null;
+};
+
+const defaultState: BodyTrackingContextValue = {
   leftArm: null,
   rightArm: null,
   leftHand: null,
@@ -78,17 +87,20 @@ const defaultState: BodyTrackingState = {
   rightHandLandmarks: null,
   fps: 0,
   isReady: false,
+  videoRef: null,
+  overlayCanvasRef: null,
 };
 
-export const BodyTrackingContext = createContext<BodyTrackingState>(defaultState);
+export const BodyTrackingContext = createContext<BodyTrackingContextValue>(defaultState);
 
-export function useBodyDetection(): BodyTrackingState {
+export function useBodyDetection(): BodyTrackingContextValue {
   return useContext(BodyTrackingContext);
 }
 
 export function useBodyDetectionProvider(
   videoRef: React.RefObject<HTMLVideoElement | null>,
   canvasRef?: React.RefObject<HTMLCanvasElement | null>,
+  overlayCanvasRef?: React.RefObject<HTMLCanvasElement | null>,
 ) {
   const [state, setState] = useState<BodyTrackingState>(defaultState);
   const prevWristsRef = useRef<{ left: NormalizedLandmark | null; right: NormalizedLandmark | null }>({ left: null, right: null });
@@ -108,10 +120,17 @@ export function useBodyDetectionProvider(
 
     const raw = processFrame(video, timestamp);
 
-    // Draw debug canvas if provided
+    // Draw debug canvas if provided (includes video frame)
     const canvas = canvasRef?.current;
     if (canvas) {
       const ctx = canvas.getContext("2d");
+      if (ctx) drawDebugCanvas(ctx, video, raw);
+    }
+
+    // Draw overlay canvas if provided (same composite as debug: video + landmarks in one rAF)
+    const overlay = overlayCanvasRef?.current;
+    if (overlay) {
+      const ctx = overlay.getContext("2d");
       if (ctx) drawDebugCanvas(ctx, video, raw);
     }
 
@@ -142,7 +161,7 @@ export function useBodyDetectionProvider(
     }));
 
     rafRef.current = requestAnimationFrame(loop);
-  }, [videoRef, canvasRef]);
+  }, [videoRef, canvasRef, overlayCanvasRef]);
 
   useEffect(() => {
     let cancelled = false;

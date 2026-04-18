@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { FigureSilhouette } from "../scenery/Scenery";
+import { useBodyDetection } from "@/hooks/useBodyDetection";
 
 const JOINTS = [
   { id: "head",      x: 50, y: 17 },
@@ -37,6 +38,8 @@ type CalibrationPanelProps = {
 };
 
 export function CalibrationPanel({ onReady }: CalibrationPanelProps) {
+  const { overlayCanvasRef, isReady } = useBodyDetection();
+
   const [pct, setPct] = useState(0);
   const [confirmed, setConfirmed] = useState(false);
 
@@ -85,15 +88,19 @@ export function CalibrationPanel({ onReady }: CalibrationPanelProps) {
       </div>
 
       <div className="webcam-frame" style={{ flex: 1 }}>
-        <div className="webcam-fake">
-          <div className="fake-sun" />
-          <div className="fake-volcano" />
-          <div className="fake-sand" />
-          <div className="fake-palm" />
-        </div>
-        <div className="figure">
-          <FigureSilhouette />
-        </div>
+        {!isReady && (
+          <>
+            <div className="webcam-fake">
+              <div className="fake-sun" />
+              <div className="fake-volcano" />
+              <div className="fake-sand" />
+              <div className="fake-palm" />
+            </div>
+            <div className="figure">
+              <FigureSilhouette />
+            </div>
+          </>
+        )}
 
         <div className="cal-readout mono">
           <div>CAM 01 · 1280×720 · 30fps</div>
@@ -101,19 +108,29 @@ export function CalibrationPanel({ onReady }: CalibrationPanelProps) {
           <div>joints: <span className="ok">{lockedCount}/{totalJoints}</span></div>
         </div>
 
-        <div className="rig-layer">
-          {bonesSvg.map(({ a, b, locked, key }) => {
-            if (!a || !b) return null;
-            return <Bone key={key} a={a} b={b} locked={locked} />;
-          })}
-          {JOINTS.map((j, i) => (
-            <div
-              key={j.id}
-              className={`rig-joint ${i < lockedCount ? "locked" : ""} ${i === lockedCount ? "active" : ""}`}
-              style={{ left: `${j.x}%`, top: `${j.y}%` }}
+        {isReady
+          ? (
+            <canvas
+              ref={overlayCanvasRef}
+              width={640}
+              height={480}
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", objectFit: "cover" }}
             />
-          ))}
-        </div>
+          ) : (
+            <div className="rig-layer">
+              {bonesSvg.map(({ a, b, locked, key }) => {
+                if (!a || !b) return null;
+                return <Bone key={key} a={a} b={b} locked={locked} />;
+              })}
+              {JOINTS.map((j, i) => (
+                <div
+                  key={j.id}
+                  className={`rig-joint ${i < lockedCount ? "locked" : ""} ${i === lockedCount ? "active" : ""}`}
+                  style={{ left: `${j.x}%`, top: `${j.y}%` }}
+                />
+              ))}
+            </div>
+          )}
 
         <div className="cal-overlay">
           <div className="corner tl" /><div className="corner tr" />
