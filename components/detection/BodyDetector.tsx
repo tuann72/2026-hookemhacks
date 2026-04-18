@@ -11,10 +11,11 @@ interface Props {
 export default function BodyDetector({ children, debug = false }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const state = useBodyDetectionProvider(videoRef, debug ? canvasRef : undefined);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const state = useBodyDetectionProvider(videoRef, debug ? canvasRef : undefined, overlayCanvasRef);
 
   return (
-    <BodyTrackingContext.Provider value={state}>
+    <BodyTrackingContext.Provider value={{ ...state, videoRef, overlayCanvasRef }}>
       <video
         ref={videoRef}
         autoPlay

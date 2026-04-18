@@ -1,38 +1,88 @@
 "use client";
 
-import { useEffect } from "react";
-import { useGameStore } from "@/lib/store/gameStore";
-import { REMOTE_PLAYER_ID } from "@/types";
+import { useState, useCallback } from "react";
+import {
+  createRoom,
+  joinRoom,
+  leaveRoom,
+  startGame,
+} from "@/lib/multiplayer/roomService";
+import type { Room } from "@/lib/multiplayer/types";
 
-// TRACK 3 — replace this stub with a Supabase Realtime presence channel.
-// Responsibility: watch room presence events and flip the matching player's
-// isConnected flag in the game store.
-//
-// Suggested shape:
-//   const channel = supabase.channel(`room:${roomId}`, { config: { presence: { key: userId } } });
-//   channel.on("presence", { event: "sync" }, () => { ... });
-//   channel.on("presence", { event: "join" }, ({ key }) => setPlayerConnected(key, true));
-//   channel.on("presence", { event: "leave" }, ({ key }) => setPlayerConnected(key, false));
-//   channel.subscribe(async (status) => { if (status === "SUBSCRIBED") channel.track({ online: true }); });
+type RoomError = string | null;
 
-export interface UseRoomOptions {
-  roomId: string;
-  userId?: string;
-}
+export function useRoom(playerId: string) {
+  const [room, setRoom] = useState<Room | null>(null);
+  const [error, setError] = useState<RoomError>(null);
+  const [loading, setLoading] = useState(false);
 
-export function useRoom({ roomId }: UseRoomOptions) {
-  const setPlayerConnected = useGameStore((s) => s.setPlayerConnected);
+  const handleCreate = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const newRoom = await createRoom(playerId);
+      setRoom(newRoom);
+      return newRoom;
+    } catch (e) {
+      setError((e as Error).message);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [playerId]);
 
-  useEffect(() => {
-    // Stub: no-op. Track 3 wires Supabase Realtime here.
-    // Expose a manual offline-on-unmount so devs can fake a disconnect flow.
-    return () => {
-      setPlayerConnected(REMOTE_PLAYER_ID, false);
-    };
-  }, [roomId, setPlayerConnected]);
+  const handleJoin = useCallback(
+    async (code: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const joinedRoom = await joinRoom(code, playerId);
+        setRoom(joinedRoom);
+        return joinedRoom;
+      } catch (e) {
+        setError((e as Error).message);
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [playerId]
+  );
+
+  const handleLeave = useCallback(async () => {
+    if (!room) return;
+    setLoading(true);
+    try {
+      await leaveRoom(room.id, playerId);
+      setRoom(null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [room, playerId]);
+
+  const handleStart = useCallback(async () => {
+    if (!room) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await startGame(room.id, playerId);
+      setRoom((prev) => prev ? { ...prev, status: "active" } : null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [room, playerId]);
 
   return {
-    roomId,
-    isReady: false, // Track 3: flip to true once channel subscribes
+    room,
+    error,
+    loading,
+    createRoom: handleCreate,
+    joinRoom: handleJoin,
+    leaveRoom: handleLeave,
+    startGame: handleStart,
   };
 }

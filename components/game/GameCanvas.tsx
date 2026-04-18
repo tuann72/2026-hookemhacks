@@ -22,7 +22,7 @@ export function GameCanvas({ debug = false }: GameCanvasProps) {
 
   return (
     <Canvas
-      shadows
+      shadows="percentage"
       dpr={[1, 2]}
       gl={{ antialias: true, powerPreference: "high-performance" }}
       camera={{ position: [0, 3.5, 7.5], fov: 42, near: 0.1, far: 100 }}
