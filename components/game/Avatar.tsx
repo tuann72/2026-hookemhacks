@@ -155,13 +155,6 @@ export function Avatar({
   // so the transition matches the 2D SVG preview in ArmRigSim.
   const rightArmSimPhase = useRef(0);
   const leftArmSimPhase = useRef(0);
-  // Per-arm: previous armSim target + when (in performance.now() ms) it last
-  // transitioned out of "punch". Used to hold the tween at full extension for
-  // a brief moment after release so the retraction reads smoother.
-  const rightArmPrevTarget = useRef<"punch" | "guard" | null>(null);
-  const leftArmPrevTarget = useRef<"punch" | "guard" | null>(null);
-  const rightArmReleaseAt = useRef(-Infinity);
-  const leftArmReleaseAt = useRef(-Infinity);
 
   useFrame((state, delta) => {
     if (!root.current) return;
@@ -222,25 +215,7 @@ export function Avatar({
       if (!armSim) continue;
 
       const phaseRef = side === "right" ? rightArmSimPhase : leftArmSimPhase;
-      const prevTargetRef =
-        side === "right" ? rightArmPrevTarget : leftArmPrevTarget;
-      const releaseAtRef =
-        side === "right" ? rightArmReleaseAt : leftArmReleaseAt;
-
-      // Record the moment armSim transitions out of "punch" so we can hold the
-      // extended pose briefly before retracting — softens the end of the punch.
-      if (armSim !== prevTargetRef.current) {
-        if (prevTargetRef.current === "punch" && armSim !== "punch") {
-          releaseAtRef.current = performance.now();
-        }
-        prevTargetRef.current = armSim;
-      }
-
-      const PUNCH_END_HOLD_MS = 70;
-      const inEndHold =
-        armSim !== "punch" &&
-        performance.now() - releaseAtRef.current < PUNCH_END_HOLD_MS;
-      const target = armSim === "punch" || inEndHold ? 1 : 0;
+      const target = armSim === "punch" ? 1 : 0;
       // Asymmetric exp smoothing — snappy extension, slower retraction so the
       // return to guard reads as a natural recoil rather than a mirror snap.
       const rate = target === 1 ? 10 : 5.5;
