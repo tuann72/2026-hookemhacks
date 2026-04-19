@@ -6,6 +6,8 @@
 import dynamic from "next/dynamic";
 import BodyDetector from "@/components/detection/BodyDetector";
 import { CVRigBridge } from "@/components/detection/CVRigBridge";
+import { DropBallButton } from "@/components/game/DropBallButton";
+import { HPBars } from "@/components/game/HPBars";
 import { SELF_PLAYER_ID } from "@/types";
 
 const GameCanvas = dynamic(
@@ -34,6 +36,8 @@ export default function WorldPage() {
       <CVRigBridge playerId={SELF_PLAYER_ID} />
       <div className="relative h-screen w-screen overflow-hidden bg-black">
         <GameCanvas debug={false} />
+        <HPBars />
+        <DropBallButton />
         <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">
           world · CV driven{debug ? " · feed bottom-right" : ""}
         </div>
