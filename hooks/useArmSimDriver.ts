@@ -93,9 +93,14 @@ export function useArmSimDriver({
     refreshArm("right");
     return usePunchCalibrationStore.subscribe((state, prev) => {
       if (state.leftMetrics.inGuard !== prev.leftMetrics.inGuard) {
+        // Returning to guard clears any stuck punch latch — covers the case
+        // where the CV thresholds stayed true (e.g. fingers still spread) so
+        // usePunchDetector never emitted an onRelease.
+        if (state.leftMetrics.inGuard) punchingRef.current.left = false;
         refreshArm("left");
       }
       if (state.rightMetrics.inGuard !== prev.rightMetrics.inGuard) {
+        if (state.rightMetrics.inGuard) punchingRef.current.right = false;
         refreshArm("right");
       }
     });
