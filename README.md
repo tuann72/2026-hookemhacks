@@ -1,4 +1,4 @@
-# HookEm Hacks 2026 — Kaiju Cove
+# HookEm Hacks 2026 — Beach Box
 
 A 2-player webcam-controlled fighting game. Players use their body as a
 controller via MediaPipe pose + hand tracking; matches are rendered in a 3D
