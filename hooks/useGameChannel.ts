@@ -225,7 +225,7 @@ export function useGameChannel({
 
   const broadcastGameEvent = useCallback(
     (event: Omit<GameEvent, "timestamp">) => {
-      channelRef.current?.broadcastGameEvent(event);
+      return channelRef.current?.broadcastGameEvent(event) ?? Promise.resolve();
     },
     []
   );

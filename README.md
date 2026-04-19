@@ -107,6 +107,23 @@ See [`lib/multiplayer/types.ts`](lib/multiplayer/types.ts) for the wire
 format and [`hooks/useGameChannel.ts`](hooks/useGameChannel.ts) for the
 subscribe / broadcast surface.
 
+### Combat feedback
+
+- **HP bars** — opponent top-right, you bottom-left, fighting-game style.
+- **Camera shake** — direct unguarded hits on you wobble the camera in place
+  and settle back to the first-person POV.
+- **Guard indicators** — black shield bottom-center when *you* guard, red
+  shield floating over the *opponent's* head when they guard.
+- **SFX** — `public/sound/hit.mp3` plays on each unguarded landing; `end.mp3`
+  plays once when HP hits zero. Global mute toggle lives on `/world`.
+
+### Lobby
+
+Pick one of six avatar colors by clicking your avatar circle — the dropdown
+broadcasts your choice to the peer via a dedicated tint event (presence-only
+updates don't reliably re-sync on Supabase Realtime, so we use a broadcast
+overlay). Both players' colors persist to `localStorage`.
+
 ### Clip pipeline
 
 During a match (`lib/ingestion/useIngestion.ts`):
@@ -192,7 +209,12 @@ identity and collapse to one presence entry. For a real 2-player test:
 
 Dev-only routes (cv-debug, punch-test, recorder-test, test-multiplayer,
 gestures, world) are reachable by URL but not linked anywhere. Use them as
-scratch space.
+scratch space. `/world` in particular has:
+
+- **Debug · punches** button — opens the calibration panel with sliders,
+  guard / punch counts, reset-camera, and hide-body toggles.
+- **Sound · on/off** button — global mute gate for the hit/end SFX (also
+  affects `/game` since the flag is one shared Zustand store).
 
 ## Out of scope (for now)
 

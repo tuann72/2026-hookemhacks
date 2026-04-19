@@ -86,7 +86,11 @@ export default function LobbyPage() {
       playerName: playerName || playerId,
       initialTint: loadStoredTint() ?? undefined,
       onGameEvent: (e) => {
-        if (e.type === "game_start") router.push(`/game/${code}`);
+        // Hard nav (not router.push) so the joiner tears down its JS runtime,
+        // Supabase WebSocket, and MediaPipe instance — guarantees a fresh
+        // channel subscription on the game page rather than reusing potentially
+        // stale realtime state from the lobby.
+        if (e.type === "game_start") window.location.href = `/game/${code}`;
       },
     });
 
@@ -141,13 +145,15 @@ export default function LobbyPage() {
     setStarting(true);
     try {
       await startGame(room.id, playerId);
-      broadcastGameEvent({ type: "game_start", payload: {} });
-      router.push(`/game/${code}`);
+      // Await the broadcast wire flush before hard-nav so the joiner reliably
+      // receives game_start and triggers their own reload.
+      await broadcastGameEvent({ type: "game_start", payload: {} });
+      window.location.href = `/game/${code}`;
     } catch (e) {
       setLoadError((e as Error).message);
       setStarting(false);
     }
-  }, [room, isHost, starting, playerId, broadcastGameEvent, router, code]);
+  }, [room, isHost, starting, playerId, broadcastGameEvent, code]);
 
   // Auto-start the match once every player has readied up. Guard calibration
   // happens on the game page's loading screen.

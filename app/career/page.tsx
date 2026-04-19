@@ -37,7 +37,7 @@ type CareerRecord = {
 const EXAMPLE_QUERIES = [
   "How many punches have I thrown?",
   "Show me a clip with 5+ punches",
-  "Find a clip where I threw an amazing combo",
+  "What was my longest match?",
 ];
 
 export default function CareerPage() {

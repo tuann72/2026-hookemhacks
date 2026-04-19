@@ -54,8 +54,10 @@ app/
   test-multiplayer/, gestures/, world/   Dev-only test benches
 
 components/
-  detection/    BodyDetector, PunchDetector, calibration UIs
-  game/         3D avatars, stage, HP bars, collision, scene props
+  detection/    BodyDetector, PunchDetector, CalibrateGuardPanel, GuardVignette
+                (black shield bottom-center when local player guards)
+  game/         Avatar, stage, HPBars, collision, scene props,
+                OpponentGuardBadge (red shield over opponent's head when they guard)
   pages/        Page-level compositions (Calibration, GameScreen, Lobby, Results)
   scenery/      Backdrop
   search/       QueryBar + ResultsGrid (clip-search UI)
@@ -71,21 +73,27 @@ hooks/
   useRoom.ts             Room CRUD wrapper around roomService
 
 lib/
-  combat/        Damage math
+  combat/        Damage math (MAX_HP, PUNCH_DAMAGE_BASE, guard multiplier)
   detection/     Punch geometry (shared by local + remote)
   embeddings/    (stub placeholder)
-  game/          Scoring + sport-style layout helpers
+  game/          Scoring, sport-style layout helpers, avatarColors (6-color picker palette)
   generation/    Gemini text gen (uses @google/generative-ai — legacy)
   ingestion/     Match lifecycle + chunk upload + event tracker
   mediapipe/     Pose + Hand landmarker creation
   multiplayer/   gameChannel, roomService, poseSnapshot, hitBroadcaster, types
   recorder/      MediaRecorder wrapper that emits 5-second .webm chunks
   recording/     (stub placeholder)
-  rigging/       Landmarks → humanoid bone rotations
+  rigging/       Landmarks → humanoid bone rotations, applyPunchKeyframe (triangle-IK)
   search/        Gemini query planner + dispatcher (aggregate / retrieve / hybrid)
-  store/         Zustand stores (game, pose, armSim, calibration, remoteGuard)
+  sound/         SFX player (hit/end cues) with pooled <audio> elements
+  store/         Zustand stores — one file each:
+                 game, pose, armSim, punchCalibration, calibrationSignal,
+                 remoteGuard, camera (reset + shake), viewSettings (hide-body),
+                 sound (global mute)
   supabase/      client.ts (browser) + server.ts (SSR) + realtime helpers
   gemini.ts      Shared Gemini client + MODELS map + normalize()
+
+public/sound/    hit.mp3 + end.mp3 — fetched via /sound/*.mp3 at runtime
 
 supabase/migrations/   Numbered SQL files — see "Database" below
 types/                 Shared cross-track types (PoseLandmark, RigRotations, etc.)
@@ -116,6 +124,25 @@ to handle the "fast side subscribed before slow side booted MediaPipe" case.
 `REMOTE_PLAYER_ID` (both in `types/index.ts`). These are perspective-local
 constants — when a hit broadcast arrives, we flip the `attackerId`/`targetId`
 because their "remote" is our "self."
+
+**Game events** sent over the channel (`GameEvent.type` in
+`lib/multiplayer/types.ts`):
+- `game_start` — host broadcasts on Start button; joiners route to `/game/[code]`.
+- `game_end` — any client broadcasts on Leave; everyone returns to `/lobby`.
+- `guard_ready` — each client broadcasts once its 3-2-1 calibration completes;
+  the game-screen loading overlay waits on the peer's `guard_ready` before
+  arming combat so one side can't start punching a still-calibrating opponent.
+- `rematch` — "Play again" broadcasts; both sides reset HP via
+  `useGameStore.reset()` and bump `useCalibrationSignalStore.requestTick` to
+  re-run the 3-2-1 countdown.
+
+**Tint (avatar color) sync** is belt-and-braces. Presence carries the tint
+but Supabase Realtime does **not** reliably fire `sync` on updates to an
+existing presence key, so `setTint` also fires a dedicated `"tint"`
+broadcast event. `useGameChannel` maintains a `tintOverrides: Record<playerId,
+tint>` map merged into the returned `players` array via `useMemo`. Pose
+snapshots piggy-back `tint` too for a 12 Hz redundancy channel. Consumers
+keep reading `players[i].tint` — the overlay is transparent to them.
 
 ### 2. Pose pipeline (CV + sync)
 
@@ -171,6 +198,46 @@ Search is three-shaped (`lib/search/index.ts`):
 
 The route (`POST /api/query`) uses Gemini 2.5 Flash as a planner (system prompt
 has examples), validates the plan with Zod, then dispatches.
+
+### 4. Combat feedback (camera + sound + UI cues)
+
+A landed, unguarded hit fires three things in parallel:
+
+- **Camera shake** — `useCameraStore.requestShake()` bumps `shakeTick`;
+  `CameraShakeController` inside `<Canvas>` captures the current camera
+  position and applies a decaying high-frequency offset for ~380 ms before
+  restoring. Only fires when the *target* was ungarded (checked via
+  `isTargetInGuard(SELF)` in the game page's `onHit`).
+- **Hit SFX** — `playHit()` from `lib/sound/player.ts`. Pooled
+  `HTMLAudioElement` (4 slots) so rapid back-to-back hits don't cut each
+  other off. Gated on `useSoundStore.enabled` — the /world debug panel has a
+  Sound · on/off button.
+- **Guard indicators** — black shield (`GuardVignette`) bottom-center when
+  the local player is in guard; red shield (`OpponentGuardBadge`, drei
+  `<Html>` anchored in world space) over the opponent's head when their
+  pose broadcast reports `inGuard` on either hand.
+
+End-of-round plays `playEnd()` once in the HP→outcome effect.
+
+`useCameraStore` also owns a `resetTick` for the "snap back to first-person
+POV" button in the debug panel — `CameraController` subscribes and re-seats
+the camera at P1's head on each bump.
+
+### 5. Hit-sound routing (why only one side plays per hit)
+
+`applyDamage` is called from two places: `PunchCollisionDetector` (inside
+`<Canvas>`, runs in `/game`) and `useArmSimDriver.onPunch` (CV punch
+detection, both `/world` and `/game`). If both played the hit cue we'd
+double-trigger on every `/game` punch.
+
+Split:
+- **`useArmSimDriver.onPunch`** plays the cue *only when
+  `broadcastOnHit=false`* — i.e., in `/world`, where no collision detector
+  is mounted.
+- **`PunchCollisionDetector`** plays the cue when the attacker is `SELF` and
+  the hit wasn't guarded — the canonical path in `/game`.
+- **Target side** plays the cue in the game page's `onHit` handler when the
+  remapped target is `SELF` and local guard is down.
 
 ---
 
@@ -301,6 +368,18 @@ the main nav. Treat them as scratch space.
   optional raw-landmark fields first.
 - **Two Gemini SDKs coexist** (`@google/genai` and `@google/generative-ai`).
   Don't add new code to the legacy one.
+- **Presence updates to an existing key don't reliably fire `sync`.** Any
+  mutable per-player field that needs to propagate at runtime (tint, etc.)
+  should use a dedicated broadcast event in addition to `track()`. See
+  `gameChannel.setTint` + the `"tint"` broadcast handler for the pattern.
+- **Audio autoplay policy** — `Audio.play()` throws if the user hasn't
+  interacted with the page yet. The game flow guarantees a user gesture
+  (Start button) before any SFX plays, but `playHit`/`playEnd` catch + swallow
+  the rejection defensively.
+- **`/game` mount resets `useGameStore`.** Stores are singletons, so a
+  return-to-lobby-then-new-match would otherwise carry the prior match's
+  ending HP (often 0) into the next fight and instant-KO. Don't remove the
+  mount-time `reset()` in `app/game/[roomId]/page.tsx`.
 
 ---
 

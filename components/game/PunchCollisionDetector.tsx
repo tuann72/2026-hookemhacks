@@ -14,6 +14,7 @@ import {
   applyDamage,
 } from "@/lib/combat";
 import { broadcastHit } from "@/lib/multiplayer/hitBroadcaster";
+import { playHit } from "@/lib/sound/player";
 import { SELF_PLAYER_ID, type PlayerId } from "@/types";
 
 // Headless scene component — mount once inside <Canvas>, below Avatars.
@@ -81,7 +82,7 @@ export function PunchCollisionDetector() {
 
         if (_fist.distanceTo(_head) <= HIT_RADIUS) {
           consumedRef.current.add(punch.startedAt);
-          const { amount } = applyDamage(targetId, PUNCH_DAMAGE_BASE);
+          const { amount, guarded } = applyDamage(targetId, PUNCH_DAMAGE_BASE);
           // Broadcast so the peer applies the same damage. No-op in /world.
           if (attackerId === SELF_PLAYER_ID) {
             broadcastHit({
@@ -89,6 +90,9 @@ export function PunchCollisionDetector() {
               targetId: targetId as PlayerId,
               damage: amount,
             });
+            // Attacker-side feedback: clean hit on an unguarded target plays
+            // the impact cue. Guarded hits are muted.
+            if (!guarded) playHit();
           }
           break; // one target per punch
         }

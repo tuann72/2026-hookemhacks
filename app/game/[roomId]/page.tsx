@@ -15,9 +15,9 @@ import { useGameStore } from "@/lib/store/gameStore";
 import { usePoseStore } from "@/lib/store/poseStore";
 import { useRemoteGuardStore } from "@/lib/store/remoteGuardStore";
 import { setHitBroadcaster } from "@/lib/multiplayer/hitBroadcaster";
-import { useCalibrationSignalStore } from "@/lib/store/calibrationSignalStore";
 import { useCameraStore } from "@/lib/store/cameraStore";
 import { isTargetInGuard } from "@/lib/combat";
+import { playEnd, playHit } from "@/lib/sound/player";
 import { loadStoredTint } from "@/lib/game/avatarColors";
 import { REMOTE_PLAYER_ID, SELF_PLAYER_ID } from "@/types";
 
@@ -33,7 +33,10 @@ export default function GamePage() {
   const [step, setStep] = useState<GameStep>("game");
   const [matchPct, setMatchPct] = useState(TWEAK_DEFAULTS.matchPct);
   const [leaving, setLeaving] = useState(false);
-  const [matchKey, setMatchKey] = useState(0);
+  // matchKey was bumped on rematch to remount IngestionBridge; rematch now
+  // does a full page reload so the natural mount handles it. Kept as a static
+  // 0 so the GameScreen prop signature is unchanged.
+  const [matchKey] = useState(0);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const endedMatchesRef = useRef<Set<string>>(new Set());
   const setHostId = useGameStore((s) => s.setHostId);
@@ -95,16 +98,10 @@ export default function GamePage() {
     onGameEvent: (e) => {
       if (e.type === "game_end") router.push(`/lobby/${code}`);
       else if (e.type === "rematch") {
-        useGameStore.getState().reset();
-        useCalibrationSignalStore.getState().requestRecalibrate();
-        setOutcome(null);
-        // Remount IngestionBridge → new matches row for this rematch.
-        setMatchKey((k) => k + 1);
-        // Rearm the guard-ready gate for round N+1. Without this, both sides
-        // enter rematch with peerGuardReady=true carried over from round N,
-        // and the waiting-peer phase dismisses instantly — sync lost.
-        setPeerGuardReady(false);
-        selfGuardReadyRef.current = false;
+        // Hard reload to guarantee a fresh Supabase channel + MediaPipe state
+        // for round N+1. The post-reload mount runs the existing on-mount
+        // resets (gameStore.reset, recalibrate signal, etc.) naturally.
+        window.location.reload();
       } else if (e.type === "guard_ready") {
         // GameChannel.broadcastGameEvent uses self:false, so any guard_ready
         // we receive is by definition the peer's.
@@ -121,10 +118,12 @@ export default function GamePage() {
       // their "remote" = our "self", and vice versa.
       const localTargetId = hit.targetId === REMOTE_PLAYER_ID ? SELF_PLAYER_ID : REMOTE_PLAYER_ID;
       useGameStore.getState().damagePlayer(localTargetId, hit.damage);
-      // Direct hit on us (guard down) → wobble the camera. Local guard state
-      // is the source of truth for whether we blocked it.
+      // Direct hit on us (guard down) → wobble the camera and play the
+      // impact cue. Local guard state is the source of truth for whether we
+      // blocked it.
       if (localTargetId === SELF_PLAYER_ID && !isTargetInGuard(SELF_PLAYER_ID)) {
         useCameraStore.getState().requestShake(1);
+        playHit();
       }
     },
     onPoseSnapshot: (snap) => {
@@ -249,6 +248,11 @@ export default function GamePage() {
     if (selfHp > 0 && remoteHp > 0) return;
     const selfWon = remoteHp <= 0;
     setOutcome(selfWon ? "self" : "remote");
+    // One-shot round-end cue. The outer guard above only passes this effect
+    // when one HP has hit zero, and the setOutcome + KO-freeze in the hit
+    // loop prevents re-entry on the same KO — so playEnd() fires exactly
+    // once per round end.
+    playEnd();
     if (!selfWon) return;
     if (!activeMatchId || !playerId) return;
     if (endedMatchesRef.current.has(activeMatchId)) return;
@@ -272,17 +276,11 @@ export default function GamePage() {
     setActiveMatchId(id);
   }, []);
 
-  const onPlayAgain = useCallback(() => {
-    useGameStore.getState().reset();
-    useCalibrationSignalStore.getState().requestRecalibrate();
-    broadcastGameEvent({ type: "rematch", payload: {} });
-    setOutcome(null);
-    // Mirrors the remote-side handler so the host also rolls a new match row.
-    setMatchKey((k) => k + 1);
-    // Rearm the guard-ready gate locally (peer side rearms in its rematch
-    // handler). Overlay resets via its own recalTick effect.
-    setPeerGuardReady(false);
-    selfGuardReadyRef.current = false;
+  const onPlayAgain = useCallback(async () => {
+    // Await the broadcast wire flush so the peer reliably receives rematch
+    // and triggers their own reload before we tear down our runtime.
+    await broadcastGameEvent({ type: "rematch", payload: {} });
+    window.location.reload();
   }, [broadcastGameEvent]);
 
   // Overlay calls this once when local baseline capture lands. Broadcasts

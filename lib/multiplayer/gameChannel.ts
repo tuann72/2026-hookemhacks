@@ -341,15 +341,20 @@ export class GameChannel {
     });
   }
 
-  broadcastGameEvent(event: Omit<GameEvent, "timestamp">): void {
-    this.channel.send({
-      type: "broadcast",
-      event: "game_event",
-      payload: {
-        ...event,
-        timestamp: performance.now(),
-      } satisfies GameEvent,
-    });
+  broadcastGameEvent(event: Omit<GameEvent, "timestamp">): Promise<unknown> {
+    // Returned so callers (e.g. game_start, rematch) can await the wire flush
+    // before tearing down the JS runtime via window.location.* — without the
+    // await, a hard nav can race the WebSocket and drop the event.
+    return Promise.resolve(
+      this.channel.send({
+        type: "broadcast",
+        event: "game_event",
+        payload: {
+          ...event,
+          timestamp: performance.now(),
+        } satisfies GameEvent,
+      }),
+    );
   }
 
   // Fire-and-forget pose frame. Expect callers to throttle (~15 Hz) — this

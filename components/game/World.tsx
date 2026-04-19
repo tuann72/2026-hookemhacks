@@ -18,6 +18,7 @@ import { GolfGreen } from "./props/GolfGreen";
 import { BoxingRing } from "./props/BoxingRing";
 import { PirateShip } from "./props/PirateShip";
 import { Cove } from "./props/Cove";
+import { Godzilla } from "./props/Godzilla";
 
 // Tropical-sunset arena — matches the landing-UI aesthetic (volcano, ocean,
 // palms, warm sky) instead of the old neon concrete arena. Sport props still
@@ -84,6 +85,9 @@ function ArenaShell() {
       {/* Main volcano — a truncated cone centered-back with lava glow at the
           crater, per the landing backdrop */}
       <Volcano position={[2, 0, -22]} height={10} baseRadius={7} />
+
+      {/* Kaiju looming beside the main volcano — silhouette + lava-glow eyes */}
+      <Godzilla position={[8.5, 0, -26]} rotation={[0, -0.25, 0]} scale={1.45} />
 
       {/* Left cove — volcano mountain with a rocky inlet that opens toward
           the pirate ship, replacing the plain background mountain */}
