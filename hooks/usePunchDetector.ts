@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useBodyDetection } from "@/hooks/useBodyDetection";
 import { usePunchCalibrationStore } from "@/lib/store/punchCalibrationStore";
+import { useCalibrationSignalStore } from "@/lib/store/calibrationSignalStore";
 import {
   type HandMetrics,
   EMPTY_METRICS,
@@ -140,6 +141,17 @@ export function usePunchDetector(opts: {
     uppercutChargeStartRef.current = null;
     guardHeldSinceRef.current = null;
   }, []);
+
+  // External recalibrate trigger — bumped by the rematch flow. Skip the
+  // initial (tick=0) value so mounting doesn't auto-start a countdown.
+  const recalibrateTick = useCalibrationSignalStore((s) => s.requestTick);
+  const lastHandledTick = useRef(recalibrateTick);
+  useEffect(() => {
+    if (recalibrateTick === lastHandledTick.current) return;
+    lastHandledTick.current = recalibrateTick;
+    usePunchCalibrationStore.getState().setBaseline(null);
+    onCalibrate();
+  }, [recalibrateTick, onCalibrate]);
 
   // Detection tick — reruns whenever hand landmarks change. Thresholds +
   // baseline are read via getState() inside the effect so the effect doesn't

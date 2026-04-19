@@ -11,7 +11,7 @@ type ViewSettingsStore = {
 };
 
 export const useViewSettingsStore = create<ViewSettingsStore>((set) => ({
-  hideLocalBody: false,
+  hideLocalBody: true,
   toggleHideLocalBody: () =>
     set((s) => ({ hideLocalBody: !s.hideLocalBody })),
 }));

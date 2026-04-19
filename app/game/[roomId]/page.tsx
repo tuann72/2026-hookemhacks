@@ -15,6 +15,7 @@ import { useGameStore } from "@/lib/store/gameStore";
 import { usePoseStore } from "@/lib/store/poseStore";
 import { useRemoteGuardStore } from "@/lib/store/remoteGuardStore";
 import { setHitBroadcaster } from "@/lib/multiplayer/hitBroadcaster";
+import { useCalibrationSignalStore } from "@/lib/store/calibrationSignalStore";
 import { REMOTE_PLAYER_ID, SELF_PLAYER_ID } from "@/types";
 
 type GameStep = "calibrate" | "game";
@@ -63,6 +64,7 @@ export default function GamePage() {
       if (e.type === "game_end") router.push(`/lobby/${code}`);
       else if (e.type === "rematch") {
         useGameStore.getState().reset();
+        useCalibrationSignalStore.getState().requestRecalibrate();
         setOutcome(null);
       }
     },
@@ -164,6 +166,7 @@ export default function GamePage() {
 
   const onPlayAgain = useCallback(() => {
     useGameStore.getState().reset();
+    useCalibrationSignalStore.getState().requestRecalibrate();
     broadcastGameEvent({ type: "rematch", payload: {} });
     setOutcome(null);
   }, [broadcastGameEvent]);
