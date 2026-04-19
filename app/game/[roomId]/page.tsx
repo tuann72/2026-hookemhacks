@@ -54,10 +54,10 @@ export default function GamePage() {
       if (e.type === "game_end") router.push(`/lobby/${code}`);
     },
     onHit: (hit) => {
-      // Peer-authored hit — they landed a punch on `targetId` with `damage`
-      // already guard-multiplied on the sender side. Mirror it locally so
-      // both tabs converge to the same HP.
-      useGameStore.getState().damagePlayer(hit.targetId, hit.damage);
+      // Peer says they hit REMOTE_PLAYER_ID (us). Remap to our local perspective:
+      // their "remote" = our "self", and vice versa.
+      const localTargetId = hit.targetId === REMOTE_PLAYER_ID ? SELF_PLAYER_ID : REMOTE_PLAYER_ID;
+      useGameStore.getState().damagePlayer(localTargetId, hit.damage);
     },
     onPoseSnapshot: (snap) => {
       // Ignore our own echo (GameChannel uses broadcast self:false, so this
