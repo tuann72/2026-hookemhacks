@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Backdrop } from "@/components/scenery/Scenery";
 import { Calibration } from "@/components/pages/Calibration";
@@ -40,6 +40,15 @@ export default function GamePage() {
     (s) => s.players.find((p) => p.id === REMOTE_PLAYER_ID)?.hp ?? 100,
   );
   const [outcome, setOutcome] = useState<"self" | "remote" | null>(null);
+  // Peer has broadcast guard_ready — their calibration is done. Gates
+  // GameLoadingOverlay's waiting-peer → done transition so one side can't
+  // start boxing while the other is still in their 3-2-1 countdown.
+  const [peerGuardReady, setPeerGuardReady] = useState(false);
+  // Tracks whether *we've* broadcast our own guard_ready this match. Used to
+  // (a) fire exactly once from the overlay's onSelfGuardReady, and (b)
+  // re-broadcast when a peer joins presence after we're already locked in
+  // (covers refresh/reconnect cases).
+  const selfGuardReadyRef = useRef(false);
 
   useEffect(() => {
     if (!code) return;
@@ -66,6 +75,10 @@ export default function GamePage() {
         useGameStore.getState().reset();
         useCalibrationSignalStore.getState().requestRecalibrate();
         setOutcome(null);
+      } else if (e.type === "guard_ready") {
+        // GameChannel.broadcastGameEvent uses self:false, so any guard_ready
+        // we receive is by definition the peer's.
+        setPeerGuardReady(true);
       }
     },
     onHit: (hit) => {
@@ -170,6 +183,25 @@ export default function GamePage() {
     broadcastGameEvent({ type: "rematch", payload: {} });
     setOutcome(null);
   }, [broadcastGameEvent]);
+
+  // Overlay calls this once when local baseline capture lands. Broadcasts
+  // guard_ready so the peer's waiting-peer phase can dismiss. Ref-guarded so
+  // double-invocation (StrictMode, React re-entry) doesn't double-broadcast.
+  const handleSelfGuardReady = useCallback(() => {
+    if (selfGuardReadyRef.current) return;
+    selfGuardReadyRef.current = true;
+    broadcastGameEvent({ type: "guard_ready", payload: {} });
+  }, [broadcastGameEvent]);
+
+  // Re-broadcast guard_ready whenever a peer newly appears in presence after
+  // we've already locked in. Covers the "peer refreshed their tab / joined
+  // late" case — broadcasts are ephemeral, so a peer who wasn't subscribed
+  // when we first fired would otherwise never learn we're ready.
+  useEffect(() => {
+    if (!hasPeerPresence) return;
+    if (!selfGuardReadyRef.current) return;
+    broadcastGameEvent({ type: "guard_ready", payload: {} });
+  }, [hasPeerPresence, broadcastGameEvent]);
   const ready =
     peerBroadcastSeen ||
     (connected && (soloTimedOut || presenceTimedOut));
@@ -215,6 +247,8 @@ export default function GamePage() {
           playerId={playerId || undefined}
           ready={ready}
           hasPeerPresence={hasPeerPresence}
+          peerGuardReady={peerGuardReady}
+          onSelfGuardReady={handleSelfGuardReady}
         />
       )}
 

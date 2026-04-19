@@ -42,6 +42,10 @@ type GameScreenProps = {
   ready?: boolean;
   /** Whether a peer is in presence; shapes the connecting-phase copy. */
   hasPeerPresence?: boolean;
+  /** Peer has broadcast guard_ready; gates waiting-peer → combat. */
+  peerGuardReady?: boolean;
+  /** Fires once when our local baseline lands; parent broadcasts guard_ready. */
+  onSelfGuardReady?: () => void;
 };
 
 export function GameScreen({
@@ -50,6 +54,8 @@ export function GameScreen({
   playerId,
   ready = false,
   hasPeerPresence = false,
+  peerGuardReady = false,
+  onSelfGuardReady,
 }: GameScreenProps) {
   const hideDebug =
     typeof window !== "undefined" && window.location.search.includes("debug=0");
@@ -77,6 +83,8 @@ export function GameScreen({
       <GameLoadingOverlay
         ready={ready}
         hasPeerPresence={hasPeerPresence}
+        peerGuardReady={peerGuardReady}
+        onSelfGuardReady={onSelfGuardReady}
         onDone={() => setCombatStarted(true)}
       />
     </BodyDetector>

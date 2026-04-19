@@ -16,6 +16,7 @@ type Phase =
   | "guard-leadin"
   | "guard-hold"
   | "guard-done"
+  | "waiting-peer"
   | "done";
 
 type GameLoadingOverlayProps = {
@@ -23,6 +24,11 @@ type GameLoadingOverlayProps = {
   ready: boolean;
   /** Whether a peer is visible in presence; affects connecting-phase copy. */
   hasPeerPresence: boolean;
+  /** Peer has broadcast guard_ready — their baseline is captured. */
+  peerGuardReady: boolean;
+  /** Fires exactly once when our local baseline capture lands — parent
+   *  broadcasts a guard_ready event in response. */
+  onSelfGuardReady?: () => void;
   /** Fires exactly once when the overlay transitions out of guard-done into
    *  done — the signal that combat is about to begin. */
   onDone?: () => void;
@@ -38,7 +44,13 @@ type GameLoadingOverlayProps = {
  *
  * Must be mounted inside a <BodyDetector> so useBodyDetection() is available.
  */
-export function GameLoadingOverlay({ ready, hasPeerPresence, onDone }: GameLoadingOverlayProps) {
+export function GameLoadingOverlay({
+  ready,
+  hasPeerPresence,
+  peerGuardReady,
+  onSelfGuardReady,
+  onDone,
+}: GameLoadingOverlayProps) {
   const { leftHandLandmarks, rightHandLandmarks } = useBodyDetection();
   const baseline = usePunchCalibrationStore((s) => s.baseline);
   const guardCountdown = usePunchCalibrationStore((s) => s.countdown);
@@ -47,6 +59,22 @@ export function GameLoadingOverlay({ ready, hasPeerPresence, onDone }: GameLoadi
   const [phase, setPhase] = useState<Phase>("connecting");
   const [attemptId, setAttemptId] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
+
+  // Ref-synced callback/prop values so the guard-done timer effect doesn't
+  // re-schedule every time the parent re-creates `onDone` inline, which would
+  // extend the 900ms flash past its intended duration.
+  const onDoneRef = useRef(onDone);
+  const onSelfGuardReadyRef = useRef(onSelfGuardReady);
+  const peerGuardReadyRef = useRef(peerGuardReady);
+  const hasPeerPresenceRef = useRef(hasPeerPresence);
+  useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
+  useEffect(() => { onSelfGuardReadyRef.current = onSelfGuardReady; }, [onSelfGuardReady]);
+  useEffect(() => { peerGuardReadyRef.current = peerGuardReady; }, [peerGuardReady]);
+  useEffect(() => { hasPeerPresenceRef.current = hasPeerPresence; }, [hasPeerPresence]);
+
+  // Guard against firing onSelfGuardReady more than once per mount — the
+  // baseline-success effect below re-fires on every dep change.
+  const selfGuardReadyFiredRef = useRef(false);
 
   // Landmarks are kept in a ref so capture() doesn't close over stale state.
   const latestHandsRef = useRef<{
@@ -104,12 +132,17 @@ export function GameLoadingOverlay({ ready, hasPeerPresence, onDone }: GameLoadi
     };
   }, [phase, attemptId]);
 
-  // Success: baseline landed → celebrate.
+  // Success: baseline landed → celebrate. Also tell the parent we're locked
+  // in so it can broadcast guard_ready to the peer (gate for their waiting-peer).
   useEffect(() => {
     if (phase !== "guard-hold") return;
     if (!baseline) return;
     if (baseline.left || baseline.right) {
       setPhase("guard-done");
+      if (!selfGuardReadyFiredRef.current) {
+        selfGuardReadyFiredRef.current = true;
+        onSelfGuardReadyRef.current?.();
+      }
     }
   }, [phase, baseline]);
 
@@ -126,25 +159,49 @@ export function GameLoadingOverlay({ ready, hasPeerPresence, onDone }: GameLoadi
     return () => window.clearTimeout(t);
   }, [phase, guardCountdown, calibrateMsg, retryCount]);
 
-  // guard-done → done (unmount overlay, reveal game).
+  // guard-done → (done | waiting-peer) after the "GUARD LOCKED!" flash. Only
+  // dismisses to combat if the peer has also broadcast guard_ready (or isn't
+  // present at all — solo fallback). Otherwise parks in waiting-peer until
+  // the peer signal lands, preventing the "one side boxing while the other
+  // is still calibrating" race on slow clients.
+  // Reads latest peer/presence/onDone through refs so the timer isn't
+  // re-scheduled by dep churn (which would extend the flash duration).
   useEffect(() => {
     if (phase !== "guard-done") return;
     const t = window.setTimeout(() => {
-      onDone?.();
-      setPhase("done");
+      if (peerGuardReadyRef.current || !hasPeerPresenceRef.current) {
+        onDoneRef.current?.();
+        setPhase("done");
+      } else {
+        setPhase("waiting-peer");
+      }
     }, GUARD_DONE_MS);
     return () => window.clearTimeout(t);
-  }, [phase, onDone]);
+  }, [phase]);
+
+  // waiting-peer → done the moment the peer's guard_ready arrives, or if
+  // they disconnect out of presence (solo fallback, matches the existing
+  // presenceTimedOut/soloTimedOut pattern on the parent).
+  useEffect(() => {
+    if (phase !== "waiting-peer") return;
+    if (peerGuardReady || !hasPeerPresence) {
+      onDoneRef.current?.();
+      setPhase("done");
+    }
+  }, [phase, peerGuardReady, hasPeerPresence]);
 
   // Position the BodyDetector's debug MediaPipe canvas to match the phase:
-  //   connecting + guard-leadin → hidden (no camera visible)
-  //   guard-hold + guard-done   → centered + enlarged on screen
-  //   gameplay (overlay gone)   → bottom-right corner (default inline style)
+  //   connecting + guard-leadin            → hidden (no camera visible)
+  //   guard-hold + guard-done + waiting-peer → centered + enlarged on screen
+  //   gameplay (overlay gone)              → bottom-right corner (default inline style)
   // Done by toggling classes on <html> that CSS targets .body-debug-canvas.
   useEffect(() => {
     const root = document.documentElement;
     const hide = phase === "connecting" || phase === "guard-leadin";
-    const center = phase === "guard-hold" || phase === "guard-done";
+    const center =
+      phase === "guard-hold" ||
+      phase === "guard-done" ||
+      phase === "waiting-peer";
     root.classList.toggle("hide-body-debug", hide);
     root.classList.toggle("body-debug-center", center);
     return () => {
@@ -167,7 +224,10 @@ export function GameLoadingOverlay({ ready, hasPeerPresence, onDone }: GameLoadi
     !!calibrateMsg &&
     retryCount >= MAX_GUARD_RETRIES - 1;
 
-  const showWebcam = phase === "guard-hold" || phase === "guard-done";
+  const showWebcam =
+    phase === "guard-hold" ||
+    phase === "guard-done" ||
+    phase === "waiting-peer";
 
   return (
     <div aria-live="polite" role="status">
@@ -244,6 +304,17 @@ export function GameLoadingOverlay({ ready, hasPeerPresence, onDone }: GameLoadi
                 <div className="gload-locked-check">✓</div>
                 <div className="gload-locked-title">GUARD LOCKED!</div>
                 <div className="gload-locked-sub">Starting match…</div>
+              </div>
+            </div>
+          )}
+
+          {phase === "waiting-peer" && (
+            <div className="gload-waiting-peer">
+              <div className="gload-locked-card gload-waiting-card">
+                <div className="gload-locked-check">✓</div>
+                <div className="gload-locked-title">GUARD LOCKED</div>
+                <div className="gload-locked-sub">Waiting for your buddy…</div>
+                <div className="gload-spinner" />
               </div>
             </div>
           )}
@@ -551,6 +622,25 @@ export function GameLoadingOverlay({ ready, hasPeerPresence, onDone }: GameLoadi
           letter-spacing: 0.08em;
           text-transform: uppercase;
           color: var(--ink-soft);
+        }
+
+        /* Waiting-peer variant — same card as guard-done, but no flash/burst
+         * and no pop-in. Calmer presentation while we wait on the peer. */
+        .gload-waiting-peer {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: color-mix(in srgb, var(--leaf) 38%, transparent);
+          overflow: hidden;
+        }
+        .gload-waiting-card {
+          animation: none !important;
+          gap: 6px;
+        }
+        .gload-waiting-card .gload-spinner {
+          margin: 10px auto 0;
         }
       `}</style>
     </div>
