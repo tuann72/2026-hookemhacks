@@ -4,7 +4,6 @@ import { Suspense, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Backdrop } from "@/components/scenery/Scenery";
-import { BRAND } from "@/components/shared/constants";
 import { joinRoom as joinRoomService } from "@/lib/multiplayer/roomService";
 import { useIdentity } from "@/hooks/useIdentity";
 
@@ -80,7 +79,7 @@ function JoinForm() {
 
       <div className="hj-wrap">
         <div className="hj-card card">
-          <div className="hj-eyebrow">{BRAND.event} · Join a room</div>
+          <div className="hj-eyebrow">Join a room</div>
           <h1 className="hj-title">Drop into a cove.</h1>
           <p className="hj-sub">
             Punch in the four-letter word the host sent you. No keyboard required after that.

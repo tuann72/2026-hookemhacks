@@ -2,7 +2,6 @@
 
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { FigureSilhouette } from "../scenery/Scenery";
-import { BRAND } from "../shared/constants";
 
 const JOINTS = [
   { id: "head", label: "Head", x: 50, y: 17, order: 0 },
@@ -81,7 +80,7 @@ export function Calibration({ onNext, matchPct, setMatchPct }: CalibrationProps)
     <div className="cal-wrap">
       <div className="cal-header">
         <div className="cal-titleblock">
-          <div className="cal-step">Step 02 · {BRAND.event} · Calibration</div>
+          <div className="cal-step">Step 02 · Calibration</div>
           <h1 className="cal-h1">Stand in the frame.</h1>
           <p className="cal-sub">
             Back up until you can see your whole body. We&apos;ll lock onto your joints one by one — it

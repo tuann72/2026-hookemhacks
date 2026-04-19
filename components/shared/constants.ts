@@ -12,5 +12,5 @@ export const TWEAK_DEFAULTS: TweaksState = {
 
 export const BRAND = {
   event: "Hook 'Em Hacks 2026",
-  gameName: "Kaiju Cove",
+  gameName: "Beach Box",
 } as const;

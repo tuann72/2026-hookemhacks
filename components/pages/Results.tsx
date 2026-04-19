@@ -49,7 +49,7 @@ export function Results({ onPlayAgain, onBackToLobby, playerCount = 4, scoreLeve
       <div className="results-card card">
         <div className="results-hero">
           <div className="results-eyebrow">
-            Match complete · {BRAND.event} · {BRAND.gameName}
+            Match complete · {BRAND.gameName}
           </div>
           <h1 className="results-title">SUNSET.</h1>
           <div className="results-winner">

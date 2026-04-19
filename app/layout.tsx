@@ -31,8 +31,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Hook 'Em Hacks 2026 — Kaiju Cove",
-  description: "Lobby, calibration, and match flow for the Hook 'Em Hacks 2026 prototype.",
+  title: "Beach Box",
+  description: "Lobby, calibration, and match flow for Beach Box.",
 };
 
 export default function RootLayout({

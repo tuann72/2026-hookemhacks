@@ -60,11 +60,11 @@ export function CalibrationPanel({ onReady }: CalibrationPanelProps) {
   const thumbsUp =
     isReady &&
     pct >= 80 &&
+    !confirmed &&
     (leftHand?.gesture === "thumbsUp" || rightHand?.gesture === "thumbsUp");
   const thumbsRef = useRef(thumbsUp);
   thumbsRef.current = thumbsUp;
 
-  // Simulate joint detection filling in over ~8 seconds then holding
   useEffect(() => {
     if (pct >= 100) return;
     const id = setInterval(() => setPct((p) => Math.min(100, p + 1.4)), 110);
@@ -88,25 +88,13 @@ export function CalibrationPanel({ onReady }: CalibrationPanelProps) {
     return { a: ja, b: jb, locked: ja?.locked && jb?.locked, key: i };
   });
 
-  const statusLabel =
-    confirmed ? "Locked in ✓" :
-    countdown !== null ? "Hold that thumbs up…" :
-    pct >= 80  ? "Looking good — hold a thumbs up to ready up" :
-    pct >= 40  ? "Locking onto your joints…" :
-                 "Step back so your full body is visible";
-
-  const handleReady = () => {
-    if (confirmed) return;
-    commitReady();
-  };
-
-  // Begin 3-2-1 when thumbs-up is detected (MediaPipe gesture), calibration far enough along, and webcam is live.
+  // Begin 3-2-1 thumbs-up hold when gesture is detected.
   useEffect(() => {
     if (confirmed || countdown !== null || !thumbsUp) return;
     setCountdown(3);
   }, [confirmed, countdown, thumbsUp]);
 
-  // Advance countdown each second while thumbs-up stays active; cancel if the gesture drops.
+  // Advance the thumbs-up countdown each second; cancel if gesture drops.
   useEffect(() => {
     if (countdown === null || confirmed) return;
     const id = window.setTimeout(() => {
@@ -124,7 +112,20 @@ export function CalibrationPanel({ onReady }: CalibrationPanelProps) {
       });
     }, COUNTDOWN_MS);
     return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countdown, confirmed]);
+
+  const handleReady = () => {
+    if (confirmed) return;
+    commitReady();
+  };
+
+  const statusLabel =
+    confirmed ? "Waiting for everyone to ready up…" :
+    countdown !== null ? "Hold that thumbs up…" :
+    pct >= 80  ? "Looking good — hold a thumbs up to ready up" :
+    pct >= 40  ? "Locking onto your joints…" :
+                 "Step back so your full body is visible";
 
   return (
     <div className="cal-panel">
@@ -187,11 +188,21 @@ export function CalibrationPanel({ onReady }: CalibrationPanelProps) {
         </div>
 
         {countdown !== null && !confirmed && (
-          <div className="cal-countdown-overlay" aria-live="polite">
-            <div className="card cal-countdown-sheet">
-              <div className="cal-countdown-hint">Keep your thumbs up</div>
-              <div className="cal-countdown-num">{countdown}</div>
-              <div className="cal-countdown-sub">Ready in…</div>
+          <div className="cal-banner-overlay" aria-live="polite">
+            <div className="cal-guard-banner">
+              <div className="cal-guard-banner-hint">Keep your thumbs up</div>
+              <div className="cal-guard-count">{countdown}</div>
+              <div className="cal-guard-banner-sub">Ready in…</div>
+            </div>
+          </div>
+        )}
+
+        {confirmed && (
+          <div className="cal-banner-overlay" aria-live="polite">
+            <div className="cal-guard-banner">
+              <div className="cal-guard-banner-hint">You&apos;re locked in</div>
+              <div className="cal-waiting-spinner" />
+              <div className="cal-guard-banner-sub">Waiting for other players…</div>
             </div>
           </div>
         )}
@@ -203,7 +214,7 @@ export function CalibrationPanel({ onReady }: CalibrationPanelProps) {
         onClick={handleReady}
         disabled={confirmed}
       >
-        {confirmed ? "✓ Locked in" : "👍 I'm ready"}
+        {confirmed ? "✓ Ready — waiting…" : "👍 I'm ready"}
       </button>
 
       <style>{`
@@ -231,57 +242,75 @@ export function CalibrationPanel({ onReady }: CalibrationPanelProps) {
           transition: color 0.3s;
         }
         .webcam-frame { position: relative; }
-        .cal-countdown-overlay {
+        /* Non-blurring overlay — lets the webcam show through. */
+        .cal-banner-overlay {
           position: absolute;
           inset: 0;
           z-index: 20;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 16px;
-          background: color-mix(in srgb, var(--volcano-deep) 38%, transparent);
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
-          border-radius: inherit;
+          pointer-events: none;
           animation: cal-fade-in 0.2s ease-out;
         }
         @keyframes cal-fade-in {
           from { opacity: 0; }
           to { opacity: 1; }
         }
-        .cal-countdown-sheet {
+        .cal-waiting-spinner {
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          border: 3px solid color-mix(in srgb, var(--sun) 25%, transparent);
+          border-top-color: var(--sun);
+          animation: cal-spin 0.9s linear infinite;
+          margin: 6px 0;
+        }
+        @keyframes cal-spin {
+          to { transform: rotate(360deg); }
+        }
+        .cal-guard-banner {
+          position: absolute;
+          bottom: 16px;
+          left: 50%;
+          transform: translateX(-50%);
+          min-width: min(260px, calc(100% - 32px));
+          max-width: 360px;
+          padding: 14px 20px 16px;
+          background: color-mix(in srgb, white 92%, transparent);
+          border: 2px solid var(--ink);
+          border-radius: var(--radius);
+          box-shadow: var(--shadow-chunky);
           text-align: center;
-          padding: 22px 28px 20px;
-          min-width: min(260px, 100%);
-          max-width: 320px;
+          pointer-events: auto;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 4px;
         }
-        .cal-countdown-hint {
+        .cal-guard-banner-hint {
           font-family: var(--font-outfit), sans-serif;
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
           color: var(--ink);
-          margin-bottom: 10px;
-          letter-spacing: 0.02em;
         }
-        .cal-countdown-num {
+        .cal-guard-count {
           font-family: var(--font-outfit), sans-serif;
-          font-size: clamp(56px, 15vw, 96px);
+          font-size: clamp(48px, 10vw, 72px);
           font-weight: 800;
           line-height: 1;
           letter-spacing: -0.04em;
           font-variant-numeric: tabular-nums;
           color: var(--sun);
           text-shadow:
-            0 4px 0 rgba(58, 46, 76, 0.2),
-            0 8px 28px color-mix(in srgb, var(--sun) 28%, transparent);
+            0 3px 0 rgba(58, 46, 76, 0.2),
+            0 8px 24px color-mix(in srgb, var(--sun) 32%, transparent);
         }
-        .cal-countdown-sub {
-          margin-top: 12px;
+        .cal-guard-banner-sub {
           font-family: var(--font-jetbrains-mono), monospace;
-          font-size: 11px;
+          font-size: 10px;
           font-weight: 500;
           color: var(--ink-soft);
-          letter-spacing: 0.06em;
+          letter-spacing: 0.08em;
           text-transform: uppercase;
         }
         .cal-ready-btn {

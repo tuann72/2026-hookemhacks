@@ -64,7 +64,7 @@ export function Lobby({ onStart, playerCount = 4 }: LobbyProps) {
     <div className="hj-wrap">
       <div className="hj-card card">
         <div className="hj-eyebrow">
-          {BRAND.event} · {BRAND.gameName} · Lobby
+          {BRAND.gameName} · Lobby
         </div>
         <h1 className="hj-title">{mode === "host" ? "Build a cove." : "Drop into a cove."}</h1>
         <p className="hj-sub">

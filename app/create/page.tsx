@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Backdrop } from "@/components/scenery/Scenery";
-import { BRAND } from "@/components/shared/constants";
 import { createRoom } from "@/lib/multiplayer/roomService";
 import { useIdentity } from "@/hooks/useIdentity";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -48,7 +47,7 @@ export default function CreatePage() {
 
       <div className="hj-wrap">
         <div className="hj-card card">
-          <div className="hj-eyebrow">{BRAND.event} · Create a room</div>
+          <div className="hj-eyebrow">Create a room</div>
           <h1 className="hj-title">Build a cove.</h1>
           <p className="hj-sub">
             Share this four-letter word with your crew. They&apos;ll use it to join.

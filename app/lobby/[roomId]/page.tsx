@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Backdrop } from "@/components/scenery/Scenery";
 import { CalibrationPanel } from "@/components/pages/CalibrationPanel";
@@ -81,13 +81,21 @@ export default function LobbyPage() {
   const maxPlayers = room?.max_players ?? 2;
   const emptySlots = Math.max(0, maxPlayers - players.length);
 
+  // True once everyone has thumbs-upped. Fall back to localReady for self so
+  // we don't wait on the round-trip of our own presence broadcast.
+  // TEMP: solo-test mode — `players.length >= 1` lets a single player progress.
+  // Restore `players.length >= 2 &&` before shipping.
+  const allReady =
+    players.length >= 1 &&
+    players.every((p) => (p.playerId === playerId ? localReady || p.ready : p.ready));
+
   const copyCode = async () => {
     await copyToClipboard(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 1400);
   };
 
-  const handleStart = async () => {
+  const handleStart = useCallback(async () => {
     if (!room || !isHost || starting) return;
     setStarting(true);
     try {
@@ -98,7 +106,15 @@ export default function LobbyPage() {
       setLoadError((e as Error).message);
       setStarting(false);
     }
-  };
+  }, [room, isHost, starting, playerId, broadcastGameEvent, router, code]);
+
+  // Auto-start the match once every player has readied up. Guard calibration
+  // happens on the game page's loading screen.
+  useEffect(() => {
+    if (!isHost || starting) return;
+    if (!allReady) return;
+    void handleStart();
+  }, [isHost, starting, allReady, handleStart]);
 
   const handleLeave = async () => {
     if (room) {
@@ -118,7 +134,7 @@ export default function LobbyPage() {
       <div className="lobby-layout">
         {/* ── Left: player list ── */}
         <div className="lobby-panel card">
-          <div className="hj-eyebrow">{BRAND.event} · {BRAND.gameName} · Lobby</div>
+          <div className="hj-eyebrow">{BRAND.gameName} · Lobby</div>
           <h2 className="hj-title" style={{ fontSize: "clamp(24px, 4vw, 36px)", marginBottom: 4 }}>
             Build a cove.
           </h2>
@@ -171,7 +187,7 @@ export default function LobbyPage() {
                     </div>
                     <div className="player-meta mono">
                       <span className={`ready-dot ${rowReady ? "" : "waiting"}`} />
-                      {rowReady ? "Calibrated & ready" : "Calibrating…"}
+                      {rowReady ? "Ready" : "Calibrating…"}
                     </div>
                   </div>
                   <div className="player-meta mono">P{i + 1}</div>
@@ -199,35 +215,23 @@ export default function LobbyPage() {
             >
               ← Leave
             </button>
-            {isHost ? (() => {
-              const allReady = players.length >= 2 && players.every((p) => p.ready);
-              const disabled = starting || !allReady;
+            {(() => {
+              // TEMP: solo-test mode — dropped the "< 2 players" branch so the
+              // status flow still runs with just one player.
               const label = starting
                 ? "Starting…"
-                : players.length < 2
-                  ? "Waiting for another player…"
-                  : !allReady
-                    ? "Waiting for all to lock in…"
-                    : "Start match →";
+                : allReady
+                  ? "Locking in…"
+                  : "Waiting for everyone to ready up…";
               return (
-                <button
-                  type="button"
-                  className="btn primary"
-                  style={{ flex: 1, opacity: disabled ? 0.5 : 1 }}
-                  disabled={disabled}
-                  onClick={handleStart}
+                <div
+                  className="btn ghost"
+                  style={{ flex: 1, textAlign: "center", opacity: 0.8, cursor: "default" }}
                 >
                   {label}
-                </button>
+                </div>
               );
-            })() : (
-              <div
-                className="btn ghost"
-                style={{ flex: 1, textAlign: "center", opacity: 0.7, cursor: "default" }}
-              >
-                Waiting for host…
-              </div>
-            )}
+            })()}
           </div>
         </div>
 
