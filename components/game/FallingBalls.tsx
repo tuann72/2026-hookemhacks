@@ -6,7 +6,7 @@ import type { Mesh } from "three";
 import { getAvatarBody } from "./avatarCollision";
 import { AVATAR_SCALE } from "./Avatar";
 import { useBallsStore, type FallingBall } from "@/lib/store/ballsStore";
-import { applyDamage } from "@/lib/combat/damage";
+import { applyDamage } from "@/lib/combat";
 
 // Snappier-than-real gravity so the drop feels game-y, not sluggish.
 const GRAVITY = -14;

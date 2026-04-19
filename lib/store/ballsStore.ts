@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import type { PlayerId } from "@/types";
+import { BALL_DAMAGE_BASE } from "@/lib/combat/damage";
 
 export interface FallingBall {
   id: string;
@@ -23,7 +24,7 @@ let idCounter = 0;
 
 export const useBallsStore = create<BallsStore>((set) => ({
   balls: [],
-  drop: (target, damage = 15) =>
+  drop: (target, damage = BALL_DAMAGE_BASE) =>
     set((s) => ({
       balls: [
         ...s.balls,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import BodyDetector from "@/components/detection/BodyDetector";
 import { CVRigBridge } from "@/components/detection/CVRigBridge";
@@ -9,9 +9,7 @@ import { DropBallButton } from "@/components/game/DropBallButton";
 import { HPBars } from "@/components/game/HPBars";
 import { CalibrateGuardPanel } from "@/components/detection/CalibrateGuardPanel";
 import { usePunchDetector } from "@/hooks/usePunchDetector";
-import { usePoseStore } from "@/lib/store/poseStore";
-import { applyDamage, PUNCH_DAMAGE_BASE } from "@/lib/combat/damage";
-import { broadcastHit } from "@/lib/multiplayer/hitBroadcaster";
+import { useArmSimDriver } from "@/hooks/useArmSimDriver";
 import { SELF_PLAYER_ID, REMOTE_PLAYER_ID } from "@/types";
 
 // Full-screen 3D arena — same layout as /world, but mounted inside the
@@ -73,19 +71,12 @@ function PunchDebugLayer({
   onToggleDebug: () => void;
   onCloseDebug: () => void;
 }) {
-  // Side mapping: see comment in app/world/page.tsx PunchDebugLayer — the CV
-  // arm rig swaps anatomical sides, so we invert the punch label here so the
-  // override plays on the same arm the user physically threw.
-  const onPunch = useCallback((side: "left" | "right") => {
-    const mirrored = side === "left" ? "right" : "left";
-    usePoseStore.getState().setPunchAnim(SELF_PLAYER_ID, mirrored);
-    const { amount } = applyDamage(REMOTE_PLAYER_ID, PUNCH_DAMAGE_BASE);
-    broadcastHit({ attackerId: SELF_PLAYER_ID, targetId: REMOTE_PLAYER_ID, damage: amount });
-  }, []);
-  const onRelease = useCallback((side: "left" | "right") => {
-    const mirrored = side === "left" ? "right" : "left";
-    usePoseStore.getState().markPunchReleased(SELF_PLAYER_ID, mirrored);
-  }, []);
+  // Multiplayer /game: broadcast hits so the peer applies matching damage.
+  const { onPunch, onRelease } = useArmSimDriver({
+    playerId: SELF_PLAYER_ID,
+    opponentId: REMOTE_PLAYER_ID,
+    broadcastOnHit: true,
+  });
   const { onCalibrate, onResetCounts } = usePunchDetector({
     onPunch,
     onRelease,

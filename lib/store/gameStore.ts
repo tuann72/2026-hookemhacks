@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { GameEvent, GamePhase, Player, PlayerId, Sport } from "@/types";
 import { REMOTE_PLAYER_ID, SELF_PLAYER_ID } from "@/types";
+import { MAX_HP } from "@/lib/combat/damage";
 
 interface GameStore {
   sport: Sport;
@@ -28,16 +29,14 @@ interface GameStore {
   reset: () => void;
 }
 
-const DEFAULT_MAX_HP = 100;
-
 const initialPlayers: Player[] = [
   {
     id: SELF_PLAYER_ID,
     displayName: "P1",
     tint: "#f97316",
     score: 0,
-    hp: DEFAULT_MAX_HP,
-    maxHp: DEFAULT_MAX_HP,
+    hp: MAX_HP,
+    maxHp: MAX_HP,
     isLocal: true,
     isConnected: true,
   },
@@ -46,8 +45,8 @@ const initialPlayers: Player[] = [
     displayName: "P2",
     tint: "#22d3ee",
     score: 0,
-    hp: DEFAULT_MAX_HP,
-    maxHp: DEFAULT_MAX_HP,
+    hp: MAX_HP,
+    maxHp: MAX_HP,
     isLocal: false,
     isConnected: false,
   },

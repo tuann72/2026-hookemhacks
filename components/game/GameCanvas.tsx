@@ -61,14 +61,13 @@ export function GameCanvas({ debug = false, AvatarComponent = Avatar }: GameCanv
             const isRed = p.isLocal ? isLocalHost : !isLocalHost;
             BoxerComponent = isRed ? RedBoxer : BlueBoxer;
           }
-          // Opponent aim point — the other slot's origin plus shoulder
-          // height (HIPS_Y + SPINE_LEN + CHEST_LEN*0.85 ≈ 1.51) scaled by
-          // AVATAR_SCALE since the whole rig is scaled at the root. Aiming
-          // at the shoulder (not head) keeps the punch horizontal along
-          // the −Z axis instead of tilting upward.
+          // Opponent aim point — head sphere center in world space.
+          //   HIPS_Y + SPINE_LEN + CHEST_LEN + NECK_LEN + (HEAD_LEN/2 − 0.02)
+          //   = 1.0 + 0.2 + 0.25 + 0.1 + 0.09 ≈ 1.74
+          // Scaled by AVATAR_SCALE since the whole rig is scaled at the root.
           const opp = slots[1 - i];
           const opponentHeadPos: [number, number, number] | undefined = opp
-            ? [opp.position[0], opp.position[1] + 1.51 * AVATAR_SCALE, opp.position[2]]
+            ? [opp.position[0], opp.position[1] + 1.74 * AVATAR_SCALE, opp.position[2]]
             : undefined;
           return (
             <BoxerComponent

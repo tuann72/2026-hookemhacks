@@ -3,7 +3,7 @@
 // Full-screen 3D world — the arena + rigged avatars + CV all at max size
 // without the 2D HUD. Linked from the "Full" button in AvatarStage.
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import BodyDetector from "@/components/detection/BodyDetector";
 import { CVRigBridge } from "@/components/detection/CVRigBridge";
@@ -12,8 +12,8 @@ import { DropBallButton } from "@/components/game/DropBallButton";
 import { HPBars } from "@/components/game/HPBars";
 import { CalibrateGuardPanel } from "@/components/detection/CalibrateGuardPanel";
 import { usePunchDetector } from "@/hooks/usePunchDetector";
-import { usePoseStore } from "@/lib/store/poseStore";
-import { SELF_PLAYER_ID } from "@/types";
+import { useArmSimDriver } from "@/hooks/useArmSimDriver";
+import { REMOTE_PLAYER_ID, SELF_PLAYER_ID } from "@/types";
 
 const GameCanvas = dynamic(
   () => import("@/components/game/GameCanvas").then((m) => m.GameCanvas),
@@ -68,22 +68,12 @@ function PunchDebugLayer({
   onToggleDebug: () => void;
   onCloseDebug: () => void;
 }) {
-  // Single detector instance — fires punchAnim on the player's pose slot and
-  // exposes calibration callbacks for the debug panel to reuse.
-  //
-  // Side mapping: the CV arm rig (useBodyDetection.ts:160-170) swaps anatomical
-  // left/right so `leftArm` state drives `LeftUpperArm`. The punch detector's
-  // `left`/`right` labels land on the OPPOSITE arm from what the CV rig is
-  // animating, so we invert here so the punch override plays on the same arm
-  // the user physically threw.
-  const onPunch = useCallback((side: "left" | "right") => {
-    const mirrored = side === "left" ? "right" : "left";
-    usePoseStore.getState().setPunchAnim(SELF_PLAYER_ID, mirrored);
-  }, []);
-  const onRelease = useCallback((side: "left" | "right") => {
-    const mirrored = side === "left" ? "right" : "left";
-    usePoseStore.getState().markPunchReleased(SELF_PLAYER_ID, mirrored);
-  }, []);
+  // Single-player /world: no realtime channel, so we don't broadcast hits.
+  const { onPunch, onRelease } = useArmSimDriver({
+    playerId: SELF_PLAYER_ID,
+    opponentId: REMOTE_PLAYER_ID,
+    broadcastOnHit: false,
+  });
   const { onCalibrate, onResetCounts } = usePunchDetector({
     onPunch,
     onRelease,

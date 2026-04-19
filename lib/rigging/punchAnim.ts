@@ -42,7 +42,7 @@ const REST_ARM_DIR = new THREE.Vector3(0, -1, 0);
  * rotations by transforming the world aim into the shoulder's
  * parent-local space first.
  */
-function aimUpperArm(
+export function aimUpperArm(
   upperArm: THREE.Object3D,
   targetWorld: THREE.Vector3,
 ): { x: number; z: number } {

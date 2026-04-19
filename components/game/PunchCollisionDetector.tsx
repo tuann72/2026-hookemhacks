@@ -11,7 +11,7 @@ import {
   HIT_RADIUS,
   PUNCH_DAMAGE_BASE,
   applyDamage,
-} from "@/lib/combat/damage";
+} from "@/lib/combat";
 import { broadcastHit } from "@/lib/multiplayer/hitBroadcaster";
 import { SELF_PLAYER_ID, type PlayerId } from "@/types";
 

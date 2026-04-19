@@ -9,7 +9,7 @@ import { usePoseStore } from "@/lib/store/poseStore";
 import { useGameStore } from "@/lib/store/gameStore";
 import { applyRigRotations, type AvatarBones } from "@/lib/rigging";
 import { registerAvatarBody, registerAvatarBones } from "./avatarCollision";
-import { applyPunchKeyframe } from "@/lib/rigging/punchAnim";
+import { applyPunchKeyframe, aimUpperArm } from "@/lib/rigging/punchAnim";
 import { EXTEND_MS, RECOVER_MS } from "@/lib/combat/damage";
 import { useArmSimStore } from "@/lib/store/armSimStore";
 
@@ -143,9 +143,10 @@ export function Avatar({
   const phaseOffset = useRef(hashPlayerIdToPhase(playerId)).current;
 
   // Smoothed phase for the guard/punch arm-sim override. 0 = guard, 1 =
-  // punch. Tweens each frame toward the store's current target so the
-  // transition matches the 2D SVG preview in ArmRigSim.
-  const armSimPhase = useRef(0);
+  // punch. One per arm. Tweens each frame toward the store's current target
+  // so the transition matches the 2D SVG preview in ArmRigSim.
+  const rightArmSimPhase = useRef(0);
+  const leftArmSimPhase = useRef(0);
 
   useFrame((state, delta) => {
     if (!root.current) return;
@@ -188,55 +189,60 @@ export function Avatar({
       if (b.RightLowerArm) b.RightLowerArm.rotation.x = 0;
     }
 
-    // Right-arm guard/punch sim — drives RightUpperArm + RightLowerArm from
-    // the shared armSimStore. Runs AFTER CV/idle so the override wins on
-    // the right arm, BEFORE the punch keyframe so real CV-driven punches
-    // can still momentarily take over.
+    // Guard/punch arm-sim override — drives either arm from the shared
+    // armSimStore. Runs AFTER CV/idle so the override wins on the affected
+    // arm, BEFORE the punch keyframe so real CV-driven punches can still
+    // momentarily take over.
     //
-    // Chosen so:
-    //   punch  → arm fully parallel to the xz plane: shoulder, elbow, and
-    //            fist all at the same y. Pure forward extension in −z.
-    //   guard  → θ_interior = 60°, fist at the SAME y as in punch, with
-    //            the elbow dropped below shoulder height. Swinging to punch
-    //            therefore lifts the elbow up into line with the shoulder
-    //            while the fist just slides forward in −z.
-    //
-    // Solving U·sin(α_u) + F·sin(α_u + 120°) = 0 for U ≈ F gives α_u = −60°
-    // for guard (upper arm 60° below horizontal) with the forearm folded
-    // +120° back up to +60° above horizontal — fist lands at shoulder y.
-    // Punch is α_u = 0 (upper arm horizontal), forearm aligned.
-    //
-    // Rotation convention: bone rest pose hangs along −y, so upper-arm
-    // rotation.x = −π/2 − α_u, forearm rotation.x = θ_interior − π.
-    const armSim = useArmSimStore.getState().rightArm[playerId];
-    if (armSim) {
-      const target = armSim === "punch" ? 1 : 0;
-      // Framerate-independent exp smoothing, rate=10/s — ~63% of the gap
-      // closed each 100ms. Matches the SVG preview's feel.
-      armSimPhase.current +=
-        (target - armSimPhase.current) * (1 - Math.exp(-10 * delta));
-      const phase = armSimPhase.current;
+    // Guard: upper arm drops 60° (rotation.x = −π/6), forearm folds back
+    // 120° (rotation.x = −2π/3) — fist lands at shoulder y.
+    // Punch: upper arm aims at opponent's head via aimUpperArm (same helper
+    // as applyPunchKeyframe), forearm fully straight — fist tracks target.
+    const armSimState = useArmSimStore.getState();
+    for (const side of ["right", "left"] as const) {
+      const armSim =
+        side === "right"
+          ? armSimState.rightArm[playerId]
+          : armSimState.leftArm[playerId];
+      if (!armSim) continue;
 
-      // Guard: α_u = −60°, forearm folded 120°
-      const UPPER_GUARD = -Math.PI / 6;        // −30° rotation.x  (α_u = −60°)
-      const LOWER_GUARD = -(2 * Math.PI) / 3;  // −120° — forearm folded back up
-      // Punch: α_u = 0 (horizontal), forearm aligned (straight arm)
-      const UPPER_PUNCH = -Math.PI / 2;        // −90° rotation.x (α_u = 0)
+      const phaseRef = side === "right" ? rightArmSimPhase : leftArmSimPhase;
+      const target = armSim === "punch" ? 1 : 0;
+      // Framerate-independent exp smoothing, rate=10/s — matches the SVG preview.
+      phaseRef.current +=
+        (target - phaseRef.current) * (1 - Math.exp(-10 * delta));
+      const phase = phaseRef.current;
+
+      const upper =
+        side === "right" ? bones.current.RightUpperArm : bones.current.LeftUpperArm;
+      const lower =
+        side === "right" ? bones.current.RightLowerArm : bones.current.LeftLowerArm;
+      if (!upper || !lower) continue;
+
+      const UPPER_GUARD = -Math.PI / 6;
+      const LOWER_GUARD = -(2 * Math.PI) / 3;
       const LOWER_PUNCH = 0;
 
-      const b = bones.current;
-      if (b.RightUpperArm) {
-        b.RightUpperArm.rotation.x =
-          UPPER_GUARD + (UPPER_PUNCH - UPPER_GUARD) * phase;
-        b.RightUpperArm.rotation.y = 0;
-        b.RightUpperArm.rotation.z = 0;
+      let upperPunchX = -Math.PI / 2;
+      let upperPunchZ = 0;
+      if (opponentHeadPos) {
+        opponentHeadVec.current.set(
+          opponentHeadPos[0],
+          opponentHeadPos[1],
+          opponentHeadPos[2],
+        );
+        const aim = aimUpperArm(upper, opponentHeadVec.current);
+        upperPunchX = aim.x;
+        upperPunchZ = aim.z;
       }
-      if (b.RightLowerArm) {
-        b.RightLowerArm.rotation.x =
-          LOWER_GUARD + (LOWER_PUNCH - LOWER_GUARD) * phase;
-        b.RightLowerArm.rotation.y = 0;
-        b.RightLowerArm.rotation.z = 0;
-      }
+
+      upper.rotation.x = UPPER_GUARD + (upperPunchX - UPPER_GUARD) * phase;
+      upper.rotation.y = 0;
+      upper.rotation.z = upperPunchZ * phase;
+
+      lower.rotation.x = LOWER_GUARD + (LOWER_PUNCH - LOWER_GUARD) * phase;
+      lower.rotation.y = 0;
+      lower.rotation.z = 0;
     }
 
     // Punch animation override — runs AFTER the CV rig (or idle fallback) so

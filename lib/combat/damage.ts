@@ -1,45 +1,38 @@
-import { REMOTE_PLAYER_ID, SELF_PLAYER_ID, type PlayerId } from "@/types";
-import { useGameStore } from "@/lib/store/gameStore";
-import { usePunchCalibrationStore } from "@/lib/store/punchCalibrationStore";
-import { useRemoteGuardStore } from "@/lib/store/remoteGuardStore";
+// ─── Tunable combat values ────────────────────────────────────────────────────
+// All numerical damage & mitigation knobs live here. Tweak freely; every
+// consumer (game store, punch collision, ball drop, arm-sim) imports from this
+// file so there's one place to adjust balance.
+//
+// Pure constants only — no store imports — so it sits at the bottom of the
+// dependency graph and can be read during gameStore module init without a
+// circular-import crash. Logic helpers (applyDamage, isTargetInGuard) live in
+// lib/combat/index.ts.
 
-// Shared damage constants — tweak in one place.
+// ─── Health ──────────────────────────────────────────────────────────────────
 
-export const PUNCH_DAMAGE_BASE = 12;
-export const GUARD_MULTIPLIER = 0.3;
-export const HIT_RADIUS = 0.35;
+/** Starting and max HP for every player. */
+export const MAX_HP = 100;
+
+// ─── Raw damage amounts ──────────────────────────────────────────────────────
+
+/** Damage applied on a counted punch hit, before guard mitigation. */
+export const PUNCH_DAMAGE_BASE = 10;
+
+/** Damage applied when a falling ball lands on a player, before guard mitigation. */
+export const BALL_DAMAGE_BASE = 15;
+
+// ─── Mitigation ──────────────────────────────────────────────────────────────
+
+/** Multiplier applied to damage when the target is in guard (0..1). 0.5 = 50% mitigation. */
+export const GUARD_MULTIPLIER = 0.5;
+
+// ─── Punch timing & collision ────────────────────────────────────────────────
+
+/** Arm-extend duration in ms (0 → fully straight). */
 export const EXTEND_MS = 140;
+/** Arm-recover duration in ms (straight → bent). */
 export const RECOVER_MS = 180;
+/** Fraction extended before a punch can register a hit. */
 export const HIT_EXTENSION_THRESHOLD = 0.7;
-
-/**
- * True if either of the target's hands is currently in guard position.
- * Local player reads the live calibration-derived metrics; remote reads the
- * synced flag from the pose broadcast.
- */
-export function isTargetInGuard(targetId: PlayerId): boolean {
-  if (targetId === SELF_PLAYER_ID) {
-    const s = usePunchCalibrationStore.getState();
-    return s.leftMetrics.inGuard || s.rightMetrics.inGuard;
-  }
-  if (targetId === REMOTE_PLAYER_ID) {
-    const g = useRemoteGuardStore.getState();
-    return g.left || g.right;
-  }
-  return false;
-}
-
-/**
- * Apply damage to a player with the guard multiplier baked in. Returns the
- * final amount dealt and whether guard mitigated it, in case the caller
- * wants to log / broadcast / flash a hit indicator.
- */
-export function applyDamage(
-  targetId: PlayerId,
-  base: number,
-): { amount: number; guarded: boolean } {
-  const guarded = isTargetInGuard(targetId);
-  const amount = base * (guarded ? GUARD_MULTIPLIER : 1);
-  useGameStore.getState().damagePlayer(targetId, amount);
-  return { amount, guarded };
-}
+/** Meters — max fist-to-head distance that counts as a landed punch. */
+export const HIT_RADIUS = 0.35;
