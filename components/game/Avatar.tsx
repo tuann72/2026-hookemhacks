@@ -27,6 +27,13 @@ export interface AvatarProps {
   playerId: PlayerId;
   position?: [number, number, number];
   rotationY?: number;
+  /**
+   * Force the body tint, bypassing the store's `player.tint`. Used by
+   * character-variant wrappers (e.g. RedBoxer, BlueBoxer) so the same rig
+   * renders with a committed color regardless of which slot the player
+   * occupies.
+   */
+  tintOverride?: string;
 }
 
 export type AvatarComponent = (props: AvatarProps) => React.ReactElement | null;
@@ -60,6 +67,7 @@ export function Avatar({
   playerId,
   position = [0, 0, 0],
   rotationY = 0,
+  tintOverride,
 }: AvatarProps) {
   const root = useRef<Group>(null);
   const bones = useRef<AvatarBones>({});
@@ -84,7 +92,7 @@ export function Avatar({
   }, []);
 
   const player = useGameStore((s) => s.players.find((p) => p.id === playerId));
-  const tint = player?.tint ?? "#f97316";
+  const tint = tintOverride ?? player?.tint ?? "#f97316";
 
   const phaseOffset = useRef(hashPlayerIdToPhase(playerId)).current;
 

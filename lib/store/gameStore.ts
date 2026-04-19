@@ -10,9 +10,12 @@ interface GameStore {
 
   players: Player[];
   localPlayerId: PlayerId;
+  /** Host's device playerId, from rooms.host_id. Null until resolved. */
+  hostId: string | null;
 
   setSport: (sport: Sport) => void;
   setPhase: (phase: GamePhase) => void;
+  setHostId: (hostId: string | null) => void;
   addScore: (playerId: PlayerId, delta: number) => void;
   setPlayerName: (playerId: PlayerId, name: string) => void;
   setPlayerConnected: (playerId: PlayerId, connected: boolean) => void;
@@ -47,12 +50,14 @@ const initial = {
   elapsedMs: 0,
   players: initialPlayers,
   localPlayerId: SELF_PLAYER_ID,
+  hostId: null as string | null,
 };
 
 export const useGameStore = create<GameStore>((set) => ({
   ...initial,
   setSport: (sport) => set({ sport }),
   setPhase: (phase) => set({ phase }),
+  setHostId: (hostId) => set({ hostId }),
   addScore: (playerId, delta) =>
     set((s) => ({
       players: s.players.map((p) =>

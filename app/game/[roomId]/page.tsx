@@ -8,7 +8,11 @@ import { GameScreen } from "@/components/pages/GameScreen";
 import { TWEAK_DEFAULTS } from "@/components/shared/constants";
 import { useGameChannel } from "@/hooks/useGameChannel";
 import { useIdentity } from "@/hooks/useIdentity";
+import { usePoseSync } from "@/hooks/usePoseSync";
 import { endMatch, getRoomByCode } from "@/lib/multiplayer/roomService";
+import { useGameStore } from "@/lib/store/gameStore";
+import { usePoseStore } from "@/lib/store/poseStore";
+import { REMOTE_PLAYER_ID, SELF_PLAYER_ID } from "@/types";
 
 type GameStep = "calibrate" | "game";
 
@@ -22,27 +26,43 @@ export default function GamePage() {
   const [step, setStep] = useState<GameStep>("game");
   const [matchPct, setMatchPct] = useState(TWEAK_DEFAULTS.matchPct);
   const [leaving, setLeaving] = useState(false);
+  const setHostId = useGameStore((s) => s.setHostId);
 
   useEffect(() => {
     if (!code) return;
     let cancelled = false;
     getRoomByCode(code)
       .then((r) => {
-        if (!cancelled && r) setRoomUuid(r.id);
+        if (cancelled || !r) return;
+        setRoomUuid(r.id);
+        setHostId(r.host_id);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [code]);
+  }, [code, setHostId]);
 
-  const { broadcastGameEvent } = useGameChannel({
+  const { broadcastGameEvent, broadcastPoseSnapshot, connected } = useGameChannel({
     roomId: roomUuid ?? "",
     playerId,
     playerName: playerName || playerId,
     onGameEvent: (e) => {
       if (e.type === "game_end") router.push(`/lobby/${code}`);
     },
+    onPoseSnapshot: (snap) => {
+      // Ignore our own echo (GameChannel uses broadcast self:false, so this
+      // shouldn't fire, but guard anyway). Remote rigs land in the REMOTE
+      // pose slot — the Avatar reads from there and animates automatically.
+      if (!snap.rig || snap.playerId === playerId) return;
+      usePoseStore.getState().setRig(REMOTE_PLAYER_ID, snap.rig);
+    },
+  });
+
+  usePoseSync({
+    selfId: SELF_PLAYER_ID,
+    broadcast: broadcastPoseSnapshot,
+    enabled: connected && !!roomUuid,
   });
 
   const returnToLobby = async (reason: string) => {
