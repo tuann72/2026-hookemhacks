@@ -91,6 +91,8 @@ async function processClip(
       .update({ embedding: normalize(embedding), embedding_status: "ready" })
       .eq("id", claimed.id);
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[embedder/tick] embed failed", claimed.id, msg);
     await supabase.from("clips").update({ embedding_status: "failed" }).eq("id", claimed.id);
     throw err;
   }

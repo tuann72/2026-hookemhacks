@@ -36,7 +36,12 @@ const AggregatePlanSchema = z.object({
 const RetrievePlanSchema = z.object({
   kind: z.literal("retrieve"),
   filters: RetrieveFilterSchema,
+  // semanticQuery is accepted for back-compat with old planner output but
+  // ignored at dispatch time — we no longer run vector search.
   semanticQuery: z.string().optional(),
+  orderBy: z
+    .enum(["most_punches", "longest", "recent"])
+    .optional(),
   limit: z.number().optional(),
 });
 
@@ -86,14 +91,18 @@ Shape picker:
   target=match_events for per-action counts, target=match_summaries for per-match rollups.
   orderBy options on match_summaries: metric_desc/asc (by punch total), duration_desc
   (longest match), recent (most recent).
-- "retrieve": find clips matching exact structured criteria (event type + min count + time).
-- "hybrid": clips matching a fuzzy descriptor ("amazing", "sloppy", "wild") combined
-  with structured filters.
+- "retrieve": find clips matching structured criteria. Prefer this whenever the
+  user wants to SEE or WATCH something — even if their wording is fuzzy
+  ("amazing combo", "big punch") — translate fuzziness into event filters +
+  orderBy. retrieve orderBy options: most_punches (sort clips by punch count),
+  longest (sort by clip duration), recent (default).
 - "player_record": direct lookup on the player's overall record. field options:
   wins, losses, matches_played, win_rate.
 - "unknown": the question is not about this player's matches, clips, punches, or record.
   Include a one-sentence reason. Use this instead of forcing an unrelated question
   into another shape.
+
+Do NOT emit "hybrid" — it is deprecated.
 
 Allowed event types: punch, dodge, kick, block.
 
@@ -109,8 +118,14 @@ A: {"kind":"aggregate","metric":"count","target":"match_events","filters":{"even
 Q: "Show me a clip where I did 10 punches."
 A: {"kind":"retrieve","filters":{"eventType":"punch","minCount":10},"limit":5}
 
-Q: "Find a clip where I threw an amazing combo."
-A: {"kind":"hybrid","filters":{"eventType":"punch","minCount":3},"semanticQuery":"amazing combo attack","limit":5}
+Q: "Show me my best combos."
+A: {"kind":"retrieve","filters":{"eventType":"punch","minCount":3},"orderBy":"most_punches","limit":5}
+
+Q: "Show me a clip where I threw a big punch."
+A: {"kind":"retrieve","filters":{"eventType":"punch"},"orderBy":"most_punches","limit":5}
+
+Q: "Show me my longest clips."
+A: {"kind":"retrieve","filters":{},"orderBy":"longest","limit":5}
 
 Q: "What was my longest match?"
 A: {"kind":"aggregate","metric":"max","target":"match_summaries","filters":{},"orderBy":"duration_desc","limit":1}
@@ -304,10 +319,12 @@ async function runRetrieve(
   p: RetrievePlan,
   playerId: string
 ) {
+  // Structured-only clip search. We deliberately do NOT filter by
+  // embedding_status — clips are playable as soon as they upload, regardless
+  // of whether the async embedder has run.
   let q = supabase
     .from("clips")
-    .select("id, storage_path, caption, event_counts, started_at")
-    .eq("embedding_status", "ready")
+    .select("id, storage_path, caption, event_counts, started_at, duration_ms")
     .eq("player_id", playerId);
 
   if (p.filters.matchId) q = q.eq("match_id", p.filters.matchId);
@@ -315,6 +332,23 @@ async function runRetrieve(
   if (p.filters.until) q = q.lte("started_at", p.filters.until);
   if (p.filters.eventType && p.filters.minCount) {
     q = q.gte(`event_counts->>${p.filters.eventType}`, p.filters.minCount);
+  } else if (p.filters.eventType) {
+    // If an event type was asked for without a count, at least require one.
+    q = q.gte(`event_counts->>${p.filters.eventType}`, 1);
+  }
+
+  switch (p.orderBy) {
+    case "most_punches":
+      q = q.order(`event_counts->>${p.filters.eventType ?? "punch"}`, {
+        ascending: false,
+      });
+      break;
+    case "longest":
+      q = q.order("duration_ms", { ascending: false });
+      break;
+    case "recent":
+    default:
+      q = q.order("started_at", { ascending: false });
   }
 
   q = q.limit(p.limit ?? 5);
@@ -323,23 +357,14 @@ async function runRetrieve(
   return { clips: await withSignedUrls(supabase, data ?? []) };
 }
 
+// Hybrid (vector) search is disabled — dispatch treats hybrid plans as
+// retrieve so existing planner output still resolves to clips.
 async function runHybrid(
   supabase: ReturnType<typeof serviceClient>,
   p: HybridPlan,
   playerId: string
 ) {
-  const queryVec = await embedQuery(p.semanticQuery);
-
-  const { data, error } = await supabase.rpc("search_clips_hybrid", {
-    p_player_id: playerId,
-    p_event_type: p.filters.eventType ?? null,
-    p_min_count: p.filters.minCount ?? null,
-    p_query_vec: queryVec,
-    p_limit: p.limit ?? 5,
-  });
-
-  if (error) throw error;
-  return { clips: await withSignedUrls(supabase, data ?? []) };
+  return runRetrieve(supabase, { ...p, kind: "retrieve" }, playerId);
 }
 
 async function runPlayerRecord(
@@ -392,11 +417,17 @@ function formatDuration(ms: number): string {
 type ClipRow = { storage_path: string; [key: string]: unknown };
 
 async function withSignedUrls(supabase: ReturnType<typeof serviceClient>, clips: ClipRow[]) {
+  // 1h TTL so a clip keeps playing if the user scrolls back after a while —
+  // short enough that a lost link doesn't outlive the session. Tradeoff is
+  // documented at https://supabase.com/docs/guides/storage/serving/private.
   return Promise.all(
     clips.map(async (c) => {
-      const { data } = await supabase.storage
+      const { data, error } = await supabase.storage
         .from("clips")
-        .createSignedUrl(c.storage_path, 300);
+        .createSignedUrl(c.storage_path, 3600);
+      if (error) {
+        console.warn("[search] signed-url failed", c.storage_path, error.message);
+      }
       return { ...c, videoUrl: data?.signedUrl ?? null };
     })
   );

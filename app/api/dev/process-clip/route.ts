@@ -73,8 +73,9 @@ export async function POST(req: Request) {
 
     return Response.json({ ok: true, clipId });
   } catch (err) {
-    await supabase.from("clips").update({ embedding_status: "failed" }).eq("id", claimed.id);
     const msg = err instanceof Error ? err.message : String(err);
+    console.error("[dev/process-clip] embed failed", claimed.id, msg);
+    await supabase.from("clips").update({ embedding_status: "failed" }).eq("id", claimed.id);
     return Response.json({ ok: false, error: msg }, { status: 500 });
   }
 }
