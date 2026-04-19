@@ -94,6 +94,12 @@ export interface PoseSnapshot {
   rightHand?: WireLandmark[] | null;
   armStates?: { left: ArmState | null; right: ArmState | null };
   handStates?: { left: HandState | null; right: HandState | null };
+  /**
+   * Sender's live guard flags (hand-near-baseline, per side). Consumed by
+   * the receiver's damage helper so a defender's guard reduces incoming
+   * punch/ball damage.
+   */
+  inGuard?: { left: boolean; right: boolean };
 }
 
 export type BroadcastPayload =

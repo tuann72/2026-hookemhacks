@@ -610,8 +610,11 @@ function PalmTree({
 }) {
   const trunkSegments = 4;
   const trunkWidth = 0.14;
+  // Match the 1.6× avatar scale so the trees don't look dwarfed next to the
+  // enlarged fighters. Tree base stays anchored at `position` (y=0 ground).
+  const TREE_SCALE = 1.6;
   return (
-    <group position={position} rotation={[0, 0, lean]}>
+    <group position={position} rotation={[0, 0, lean]} scale={TREE_SCALE}>
       {/* Trunk — segmented cylinder sections for a palm-like profile */}
       {Array.from({ length: trunkSegments }).map((_, i) => {
         const y = (height / trunkSegments) * (i + 0.5);
