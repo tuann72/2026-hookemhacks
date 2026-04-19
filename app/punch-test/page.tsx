@@ -45,6 +45,8 @@ type HandMetrics = {
   rotMet: boolean;
   velMet: boolean;
   inGuard: boolean;
+  /** True when the hand has rotated ~90° from calibrated guard — knuckles now facing camera. */
+  knucklesFacing: boolean;
 };
 
 const EMPTY_METRICS: HandMetrics = {
@@ -59,6 +61,7 @@ const EMPTY_METRICS: HandMetrics = {
   rotMet: false,
   velMet: false,
   inGuard: false,
+  knucklesFacing: false,
 };
 
 // ---------- constants ----------
@@ -70,6 +73,14 @@ const DEFAULTS: Params = {
   guard: 0.1,
   cooldown: 550,
 };
+
+// Uppercut charge: both fists must have rotated this many radians from calibrated guard
+// (pinky bone facing camera → knuckles facing camera ≈ 90°). Hold for UPPERCUT_CHARGE_MS.
+const UPPERCUT_ROTATION_THRESH = Math.PI * 0.45; // ~81° — slightly under 90° for easier trigger
+const UPPERCUT_CHARGE_MS = 1000;
+const MIN_GUARD_MS = 500; // must hold guard for this long before charge can start
+// In uppercut mode the size threshold is multiplied by this factor (easier to trigger).
+const UPPERCUT_SIZE_FACTOR = 0.6;
 
 // offBelow = the slider value at/under which that param is considered "off".
 // Guard has no off state — it's always required if calibration exists.
@@ -309,10 +320,13 @@ function PunchTest() {
   const [baseline, setBaseline] = useState<Baseline | null>(null);
   const [leftCount, setLeftCount] = useState(0);
   const [rightCount, setRightCount] = useState(0);
+  const [uppercutCount, setUppercutCount] = useState(0);
   const [leftMetrics, setLeftMetrics] = useState<HandMetrics>(EMPTY_METRICS);
   const [rightMetrics, setRightMetrics] = useState<HandMetrics>(EMPTY_METRICS);
   const [calibrateMsg, setCalibrateMsg] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [isUppercutMode, setIsUppercutMode] = useState(false);
+  const [chargeProgress, setChargeProgress] = useState(0); // 0..1
 
   // Per-side velocity requires last position + timestamp. Kept in a ref so it
   // doesn't trigger renders.
@@ -342,6 +356,13 @@ function PunchTest() {
   // from the SAME hand fired faster than COOLDOWN_MS. Cooldowns are
   // independent between hands, so an L→R combo can land with no gap.
   const lastFire = useRef<{ left: number; right: number }>({ left: 0, right: 0 });
+
+  // Uppercut mode refs
+  const isUppercutModeRef = useRef(false);
+  const uppercutChargeStartRef = useRef<number | null>(null);
+  // Tracks when both calibrated hands entered guard — uppercut charge is
+  // blocked until this timer has run for at least MIN_GUARD_MS.
+  const guardHeldSinceRef = useRef<number | null>(null);
 
   // Keep the ref fresh outside of render — written here (a post-render
   // effect) rather than inline so React's refs-during-render rule stays happy.
@@ -414,6 +435,12 @@ function PunchTest() {
   const onResetCounts = useCallback(() => {
     setLeftCount(0);
     setRightCount(0);
+    setUppercutCount(0);
+    setIsUppercutMode(false);
+    setChargeProgress(0);
+    isUppercutModeRef.current = false;
+    uppercutChargeStartRef.current = null;
+    guardHeldSinceRef.current = null;
     armed.current = { left: true, right: true };
     lastFire.current = { left: 0, right: 0 };
   }, []);
@@ -473,6 +500,10 @@ function PunchTest() {
           active.guard
         : false;
 
+      // rotDelta is how far the hand has rotated from the calibrated guard.
+      // Guard = pinky bone facing camera; ~90° rotation = knuckles facing camera.
+      const knucklesFacing = !!base && rotDelta >= UPPERCUT_ROTATION_THRESH;
+
       return {
         detected: true,
         size: sizeRatioVsBase,
@@ -485,6 +516,7 @@ function PunchTest() {
         rotMet,
         velMet,
         inGuard,
+        knucklesFacing,
       };
     };
 
@@ -492,15 +524,22 @@ function PunchTest() {
     const rotReq = !isOff(active.rotation, RANGES.rotation);
     const velReq = !isOff(active.velocity, RANGES.velocity);
 
-    const fires = (m: HandMetrics): boolean => {
+    const fires = (m: HandMetrics, uppercutMode: boolean): boolean => {
       if (!m.detected) return false;
-      if (!sizeReq && !rotReq && !velReq) return false; // nothing enabled
-      // Size/rotation need a baseline — if this hand isn't calibrated,
-      // sizeMet/rotMet will be false, which blocks the fire here. Velocity
-      // can fire without any calibration.
-      if (sizeReq && !m.sizeMet) return false;
+      if (!sizeReq && !rotReq && !velReq) return false;
       if (rotReq && !m.rotMet) return false;
       if (velReq && !m.velMet) return false;
+      if (sizeReq) {
+        // In uppercut mode: lower threshold by UPPERCUT_SIZE_FACTOR
+        const effectiveSize = uppercutMode
+          ? active.size * UPPERCUT_SIZE_FACTOR
+          : active.size;
+        const base = baseline?.[(m === lm ? "left" : "right")] ?? null;
+        const sample = sampleHand(m === lm ? body.leftHandLandmarks : body.rightHandLandmarks);
+        if (!base || !sample) return false;
+        const ratio = sample.knuckleSpan / Math.max(base.pinkySegment, 1e-4);
+        if (ratio < effectiveSize) return false;
+      }
       return true;
     };
 
@@ -508,18 +547,61 @@ function PunchTest() {
     const rm = compute("right", body.rightHandLandmarks);
 
     const nowMs = performance.now();
-    if (fires(lm)) {
+
+    // --- Guard hold tracking (gates uppercut charge) ---
+    if (lm.inGuard || rm.inGuard) {
+      if (guardHeldSinceRef.current === null) guardHeldSinceRef.current = nowMs;
+    } else {
+      guardHeldSinceRef.current = null;
+    }
+    const guardReady =
+      guardHeldSinceRef.current !== null &&
+      nowMs - guardHeldSinceRef.current >= MIN_GUARD_MS;
+
+    // --- Uppercut charge tracking ---
+    const bothFacing = lm.knucklesFacing && rm.knucklesFacing;
+    if (bothFacing && !isUppercutModeRef.current && guardReady) {
+      if (uppercutChargeStartRef.current === null) {
+        uppercutChargeStartRef.current = nowMs;
+      }
+      const elapsed = nowMs - uppercutChargeStartRef.current;
+      const progress = Math.min(1, elapsed / UPPERCUT_CHARGE_MS);
+      setChargeProgress(progress);
+      if (elapsed >= UPPERCUT_CHARGE_MS) {
+        isUppercutModeRef.current = true;
+        setIsUppercutMode(true);
+        uppercutChargeStartRef.current = null;
+        setChargeProgress(0);
+      }
+    } else {
+      if (!isUppercutModeRef.current) setChargeProgress(0);
+      uppercutChargeStartRef.current = null;
+    }
+
+    // --- Punch fire ---
+    const inUppercut = isUppercutModeRef.current;
+    if (fires(lm, inUppercut)) {
       if (armed.current.left && nowMs - lastFire.current.left >= active.cooldown) {
         setLeftCount((c) => c + 1);
+        if (inUppercut) {
+          setUppercutCount((c) => c + 1);
+          isUppercutModeRef.current = false;
+          setIsUppercutMode(false);
+        }
         armed.current.left = false;
         lastFire.current.left = nowMs;
       }
     } else {
       armed.current.left = true;
     }
-    if (fires(rm)) {
+    if (fires(rm, inUppercut)) {
       if (armed.current.right && nowMs - lastFire.current.right >= active.cooldown) {
         setRightCount((c) => c + 1);
+        if (inUppercut) {
+          setUppercutCount((c) => c + 1);
+          isUppercutModeRef.current = false;
+          setIsUppercutMode(false);
+        }
         armed.current.right = false;
         lastFire.current.right = nowMs;
       }
@@ -728,24 +810,47 @@ function PunchTest() {
             <div className="mt-1 font-mono text-[96px] font-bold leading-none tabular-nums text-white">
               {total}
             </div>
-            <div className="mt-4 grid w-full max-w-md grid-cols-2 gap-3">
+            <div className="mt-4 grid w-full max-w-md grid-cols-3 gap-3">
               <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-center">
-                <div className="text-[10px] uppercase tracking-widest text-emerald-400">
-                  Left
-                </div>
-                <div className="font-mono text-3xl tabular-nums text-emerald-200">
-                  {leftCount}
-                </div>
+                <div className="text-[10px] uppercase tracking-widest text-emerald-400">Left</div>
+                <div className="font-mono text-3xl tabular-nums text-emerald-200">{leftCount}</div>
               </div>
               <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-3 text-center">
-                <div className="text-[10px] uppercase tracking-widest text-cyan-400">
-                  Right
-                </div>
-                <div className="font-mono text-3xl tabular-nums text-cyan-200">
-                  {rightCount}
-                </div>
+                <div className="text-[10px] uppercase tracking-widest text-cyan-400">Right</div>
+                <div className="font-mono text-3xl tabular-nums text-cyan-200">{rightCount}</div>
+              </div>
+              <div className={`rounded-lg border p-3 text-center transition-colors ${uppercutCount > 0 ? "border-yellow-500/40 bg-yellow-500/10" : "border-zinc-700 bg-zinc-800/30"}`}>
+                <div className="text-[10px] uppercase tracking-widest text-yellow-400">Uppercut</div>
+                <div className="font-mono text-3xl tabular-nums text-yellow-200">{uppercutCount}</div>
               </div>
             </div>
+
+            {/* Uppercut charge bar */}
+            {chargeProgress > 0 && !isUppercutMode && (
+              <div className="mt-4 w-full max-w-md">
+                <div className="mb-1 text-center text-[10px] uppercase tracking-widest text-yellow-400">
+                  Charging uppercut…
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-800">
+                  <div
+                    className="h-full rounded-full bg-yellow-400 transition-[width] duration-75"
+                    style={{ width: `${chargeProgress * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Uppercut mode banner */}
+            {isUppercutMode && (
+              <div className="mt-4 animate-pulse rounded-xl border border-yellow-400/60 bg-yellow-400/10 px-6 py-3 text-center">
+                <div className="text-sm font-bold uppercase tracking-[0.3em] text-yellow-300">
+                  ⚡ Uppercut Mode — Punch Now!
+                </div>
+                <div className="mt-1 text-[10px] text-yellow-400/70 tracking-wider">
+                  threshold lowered · one shot · resets on punch
+                </div>
+              </div>
+            )}
 
             {/* Guard banner */}
             <div
