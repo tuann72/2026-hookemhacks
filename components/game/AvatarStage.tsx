@@ -50,7 +50,7 @@ export function AvatarStage({ debug = false, roomId, playerId }: AvatarStageProp
     <BodyDetector debug={debug}>
       <CVRigBridge playerId={SELF_PLAYER_ID} />
       {roomId && playerId && (
-        <IngestionBridge roomId={roomId} playerId={playerId} />
+        <IngestionBridge roomId={roomId} playerId={playerId} combatStarted />
       )}
       <div
         style={{
