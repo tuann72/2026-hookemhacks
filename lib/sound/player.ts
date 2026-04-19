@@ -18,6 +18,13 @@ const SOURCES: Record<Key, string> = {
   end: "/sound/end.mp3",
 };
 
+// Per-key playback volume. end.mp3 is noticeably louder than hit.mp3 by
+// default — pull it down so it doesn't clip when the round closes out.
+const VOLUME: Record<Key, number> = {
+  hit: 1.0,
+  end: 0.175,
+};
+
 const POOL_SIZE = 4;
 
 const pool: Partial<Record<Key, HTMLAudioElement[]>> = {};
@@ -29,6 +36,7 @@ function claim(key: Key): HTMLAudioElement | null {
     arr = Array.from({ length: POOL_SIZE }, () => {
       const a = new Audio(SOURCES[key]);
       a.preload = "auto";
+      a.volume = VOLUME[key];
       return a;
     });
     pool[key] = arr;
