@@ -1,4 +1,4 @@
-import { geminiPlan, QueryPlanSchema, dispatch } from "@/lib/search";
+import { geminiPlan, dispatch } from "@/lib/search";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -10,25 +10,14 @@ export async function POST(req: Request) {
     return Response.json({ error: "playerId required" }, { status: 400 });
   }
 
-  let raw: unknown;
   try {
-    raw = await geminiPlan(question, { sessionStart });
-  } catch (err) {
-    console.error("[query] planner error", err);
-    return Response.json({ error: "planner failed" }, { status: 500 });
-  }
-
-  const parsed = QueryPlanSchema.safeParse(raw);
-  if (!parsed.success) {
-    return Response.json({ error: "could not understand question" }, { status: 400 });
-  }
-
-  try {
-    const result = await dispatch(parsed.data, playerId);
+    const plan = await geminiPlan(question, { sessionStart });
+    const result = await dispatch(plan, playerId);
     return Response.json(result);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "dispatch failed";
-    console.error("[query] dispatch error", err);
-    return Response.json({ error: msg }, { status: 500 });
+    const msg = err instanceof Error ? err.message : "request failed";
+    console.error("[query] error", err);
+    const status = msg === "could not understand question" ? 400 : 500;
+    return Response.json({ error: msg }, { status });
   }
 }

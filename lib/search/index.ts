@@ -131,25 +131,85 @@ Q: "Who won the NBA finals?"
 A: {"kind":"unknown","reason":"I can only answer questions about your Kaiju Cove matches, clips, and record."}
 `;
 
-export async function geminiPlan(
+function stripCodeFence(text: string): string {
+  return text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+}
+
+function camelKey(k: string): string {
+  return k.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+}
+
+function normalizeKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeKeys);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[camelKey(k)] = normalizeKeys(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+async function callPlanner(
   question: string,
-  ctx: { sessionStart?: string }
+  system: string,
+  errorHint?: string
 ): Promise<unknown> {
-  const system = SYSTEM.replace(
-    /{sessionStart}/g,
-    ctx.sessionStart ?? new Date(0).toISOString()
-  );
+  const userText = errorHint
+    ? `${question}\n\nYour previous answer failed validation with: ${errorHint}. Return a corrected JSON plan.`
+    : question;
 
   const result = await gemini.models.generateContent({
     model: MODELS.plan,
-    contents: [{ role: "user", parts: [{ text: question }] }],
+    contents: [{ role: "user", parts: [{ text: userText }] }],
     config: {
       systemInstruction: system,
       responseMimeType: "application/json",
     },
   });
 
-  return JSON.parse(result.text ?? "{}");
+  const text = stripCodeFence(result.text ?? "{}");
+  try {
+    return normalizeKeys(JSON.parse(text));
+  } catch {
+    return null;
+  }
+}
+
+export async function geminiPlan(
+  question: string,
+  ctx: { sessionStart?: string }
+): Promise<QueryPlan> {
+  const system = SYSTEM.replace(
+    /{sessionStart}/g,
+    ctx.sessionStart ?? new Date(0).toISOString()
+  );
+
+  let raw = await callPlanner(question, system);
+  let parsed = QueryPlanSchema.safeParse(raw);
+
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+      .join("; ");
+    console.warn("[query] plan failed, retrying", { raw, issues });
+    raw = await callPlanner(question, system, issues);
+    parsed = QueryPlanSchema.safeParse(raw);
+  }
+
+  if (!parsed.success) {
+    console.error("[query] plan unparseable after retry", {
+      raw,
+      errors: parsed.error.issues,
+    });
+    throw new Error("could not understand question");
+  }
+
+  return parsed.data;
 }
 
 // ─── Query embedding ──────────────────────────────────────────────────────────
