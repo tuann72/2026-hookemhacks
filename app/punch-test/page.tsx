@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import BodyDetector from "@/components/detection/BodyDetector";
-import { CalibrateGuardPanel } from "@/components/detection/CalibrateGuardPanel";
 import { useBodyDetection } from "@/hooks/useBodyDetection";
 import type { PoseLandmark } from "@/types";
 
@@ -241,6 +240,95 @@ function ArmsSkeletonCanvas() {
     </div>
   );
 }
+
+// ---------- small UI bits ----------
+
+function Bar({ ratio, met, label }: { ratio: number; met: boolean; label: string }) {
+  const pct = Math.max(0, Math.min(1, ratio)) * 100;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-10 font-mono text-[10px] uppercase tracking-widest text-zinc-400">
+        {label}
+      </span>
+      <div className="relative h-3 flex-1 overflow-hidden rounded-full bg-zinc-800">
+        <div
+          className={`absolute inset-y-0 left-0 transition-[width] duration-75 ease-out ${
+            met ? "bg-emerald-400" : "bg-cyan-400/60"
+          }`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ParamSlider({
+  label,
+  value,
+  onChange,
+  range,
+  suffix,
+  format,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  range: Range;
+  suffix?: string;
+  format?: (v: number) => string;
+}) {
+  const safeValue = Number.isFinite(value) ? value : range.min;
+  const off = isOff(safeValue, range);
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between">
+        <label className="text-[11px] uppercase tracking-widest text-zinc-400">{label}</label>
+        <span className={`font-mono text-xs tabular-nums ${off ? "text-rose-400" : "text-emerald-300"}`}>
+          {off ? "OFF" : (format ? format(safeValue) : safeValue.toFixed(2)) + (suffix ?? "")}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={range.min}
+        max={range.max}
+        step={range.step}
+        value={safeValue}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="w-full accent-cyan-400"
+      />
+    </div>
+  );
+}
+
+function MetricsCard({ side, metrics, active }: { side: string; metrics: HandMetrics; active: Params }) {
+  const sizeOff = isOff(active.size, RANGES.size);
+  const rotOff = isOff(active.rotation, RANGES.rotation);
+  const velOff = isOff(active.velocity, RANGES.velocity);
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-[10px] uppercase tracking-[0.3em] text-zinc-400">{side} hand</span>
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest ${
+          metrics.detected ? metrics.inGuard ? "bg-emerald-500/20 text-emerald-200" : "bg-cyan-500/10 text-cyan-200" : "bg-zinc-800 text-zinc-500"
+        }`}>
+          {metrics.detected ? (metrics.inGuard ? "guard" : "tracking") : "no hand"}
+        </span>
+      </div>
+      <div className="space-y-2">
+        <Bar label="size" ratio={sizeOff ? 0 : metrics.sizeRatio} met={!sizeOff && metrics.sizeMet} />
+        <Bar label="rot" ratio={rotOff ? 0 : metrics.rotRatio} met={!rotOff && metrics.rotMet} />
+        <Bar label="vel" ratio={velOff ? 0 : metrics.velRatio} met={!velOff && metrics.velMet} />
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2 font-mono text-[10px] tabular-nums text-zinc-500">
+        <span>s <span className="text-zinc-300">{metrics.size.toFixed(3)}</span></span>
+        <span>r <span className="text-zinc-300">{((metrics.rotation * 180) / Math.PI).toFixed(0)}°</span></span>
+        <span>v <span className="text-zinc-300">{metrics.velocity.toFixed(2)}</span></span>
+      </div>
+    </div>
+  );
+}
+
+// ---------- main ----------
 
 function PunchTest() {
   const body = useBodyDetection();
