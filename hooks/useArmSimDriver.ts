@@ -75,9 +75,11 @@ export function useArmSimDriver({
         setTimeout(() => {
           markPunchReleased(playerId, avatarSide);
         }, EXTEND_MS + UPPERCUT_HOLD_MS);
-        const { amount } = applyDamage(opponentId, UPPERCUT_DAMAGE_BASE);
+        const { amount, guarded } = applyDamage(opponentId, UPPERCUT_DAMAGE_BASE);
         if (broadcastOnHit) {
           broadcastHit({ attackerId: playerId, targetId: opponentId, damage: amount });
+        } else if (!guarded) {
+          playHit();
         }
         return;
       }
