@@ -59,12 +59,20 @@ export function GameCanvas({ debug = false, AvatarComponent = Avatar }: GameCanv
             const isRed = p.isLocal ? isLocalHost : !isLocalHost;
             BoxerComponent = isRed ? RedBoxer : BlueBoxer;
           }
+          // Opponent head world pos — the other slot's origin plus the
+          // approximate head height (matches Avatar.tsx rig proportions:
+          // HIPS_Y + SPINE_LEN + CHEST_LEN + NECK_LEN + HEAD_LEN/2 ≈ 1.66).
+          const opp = slots[1 - i];
+          const opponentHeadPos: [number, number, number] | undefined = opp
+            ? [opp.position[0], opp.position[1] + 1.66, opp.position[2]]
+            : undefined;
           return (
             <BoxerComponent
               key={p.id}
               playerId={p.id}
               position={slot.position}
               rotationY={slot.rotationY}
+              opponentHeadPos={opponentHeadPos}
             />
           );
         })}
