@@ -17,6 +17,7 @@ import { useRemoteGuardStore } from "@/lib/store/remoteGuardStore";
 import { setHitBroadcaster } from "@/lib/multiplayer/hitBroadcaster";
 import { useCameraStore } from "@/lib/store/cameraStore";
 import { isTargetInGuard } from "@/lib/combat";
+import { playEnd, playHit } from "@/lib/sound/player";
 import { loadStoredTint } from "@/lib/game/avatarColors";
 import { REMOTE_PLAYER_ID, SELF_PLAYER_ID } from "@/types";
 
@@ -117,10 +118,12 @@ export default function GamePage() {
       // their "remote" = our "self", and vice versa.
       const localTargetId = hit.targetId === REMOTE_PLAYER_ID ? SELF_PLAYER_ID : REMOTE_PLAYER_ID;
       useGameStore.getState().damagePlayer(localTargetId, hit.damage);
-      // Direct hit on us (guard down) → wobble the camera. Local guard state
-      // is the source of truth for whether we blocked it.
+      // Direct hit on us (guard down) → wobble the camera and play the
+      // impact cue. Local guard state is the source of truth for whether we
+      // blocked it.
       if (localTargetId === SELF_PLAYER_ID && !isTargetInGuard(SELF_PLAYER_ID)) {
         useCameraStore.getState().requestShake(1);
+        playHit();
       }
     },
     onPoseSnapshot: (snap) => {
@@ -245,6 +248,11 @@ export default function GamePage() {
     if (selfHp > 0 && remoteHp > 0) return;
     const selfWon = remoteHp <= 0;
     setOutcome(selfWon ? "self" : "remote");
+    // One-shot round-end cue. The outer guard above only passes this effect
+    // when one HP has hit zero, and the setOutcome + KO-freeze in the hit
+    // loop prevents re-entry on the same KO — so playEnd() fires exactly
+    // once per round end.
+    playEnd();
     if (!selfWon) return;
     if (!activeMatchId || !playerId) return;
     if (endedMatchesRef.current.has(activeMatchId)) return;

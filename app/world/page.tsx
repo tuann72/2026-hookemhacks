@@ -14,6 +14,7 @@ import { usePunchDetector } from "@/hooks/usePunchDetector";
 import { useArmSimDriver } from "@/hooks/useArmSimDriver";
 import { useCameraStore } from "@/lib/store/cameraStore";
 import { useViewSettingsStore } from "@/lib/store/viewSettingsStore";
+import { useSoundStore } from "@/lib/store/soundStore";
 import { REMOTE_PLAYER_ID, SELF_PLAYER_ID } from "@/types";
 
 const GameCanvas = dynamic(
@@ -81,6 +82,8 @@ function PunchDebugLayer({
   const requestCameraReset = useCameraStore((s) => s.requestReset);
   const hideLocalBody = useViewSettingsStore((s) => s.hideLocalBody);
   const toggleHideLocalBody = useViewSettingsStore((s) => s.toggleHideLocalBody);
+  const soundEnabled = useSoundStore((s) => s.enabled);
+  const toggleSound = useSoundStore((s) => s.toggle);
 
   return (
     <>
@@ -94,6 +97,17 @@ function PunchDebugLayer({
         }`}
       >
         {debugPanel ? "Close debug" : "Debug · punches"}
+      </button>
+      <button
+        type="button"
+        onClick={toggleSound}
+        className={`absolute left-6 top-[104px] z-10 rounded-md px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.3em] transition ${
+          soundEnabled
+            ? "border border-emerald-500/60 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20"
+            : "border border-zinc-500/60 bg-zinc-500/10 text-zinc-300 hover:bg-zinc-500/20"
+        }`}
+      >
+        {soundEnabled ? "Sound · on" : "Sound · off"}
       </button>
       {debugPanel && (
         <CalibrateGuardPanel

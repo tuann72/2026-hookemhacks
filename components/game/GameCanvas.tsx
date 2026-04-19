@@ -6,6 +6,7 @@ import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import { AvatarCollisionResolver } from "./avatarCollision";
+import { OpponentGuardBadge } from "./OpponentGuardBadge";
 import { World } from "./World";
 import { Avatar, AVATAR_SCALE, type AvatarComponent } from "./Avatar";
 import { useGameStore } from "@/lib/store/gameStore";
@@ -86,15 +87,24 @@ export function GameCanvas({ debug = false, AvatarComponent = Avatar }: GameCanv
           const opponentHeadPos: [number, number, number] | undefined = opp
             ? [opp.position[0], opp.position[1] + 1.74 * AVATAR_SCALE, opp.position[2]]
             : undefined;
+          // Head center of *this* slot — used to anchor the guard badge on
+          // the remote avatar.
+          const selfHeadPos: [number, number, number] = [
+            slot.position[0],
+            slot.position[1] + 1.74 * AVATAR_SCALE,
+            slot.position[2],
+          ];
           return (
-            <AvatarComponent
-              key={p.id}
-              playerId={p.id}
-              position={slot.position}
-              rotationY={slot.rotationY}
-              opponentHeadPos={opponentHeadPos}
-              hideBody={p.isLocal && hideLocalBody}
-            />
+            <group key={p.id}>
+              <AvatarComponent
+                playerId={p.id}
+                position={slot.position}
+                rotationY={slot.rotationY}
+                opponentHeadPos={opponentHeadPos}
+                hideBody={p.isLocal && hideLocalBody}
+              />
+              {!p.isLocal && <OpponentGuardBadge headPos={selfHeadPos} />}
+            </group>
           );
         })}
         {/* Lightweight XY separation — pushes overlapping avatars apart. */}

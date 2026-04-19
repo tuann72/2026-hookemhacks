@@ -5,6 +5,7 @@ import { useArmSimStore } from "@/lib/store/armSimStore";
 import { usePunchCalibrationStore } from "@/lib/store/punchCalibrationStore";
 import { applyDamage, PUNCH_DAMAGE_BASE } from "@/lib/combat";
 import { broadcastHit } from "@/lib/multiplayer/hitBroadcaster";
+import { playHit } from "@/lib/sound/player";
 import type { PlayerId } from "@/types";
 
 // Drives the armSim store from CV punch detection + live guard flags.
@@ -66,13 +67,19 @@ export function useArmSimDriver({
     (side: "left" | "right") => {
       punchingRef.current[side] = true;
       refreshArm(side);
-      const { amount } = applyDamage(opponentId, PUNCH_DAMAGE_BASE);
+      const { amount, guarded } = applyDamage(opponentId, PUNCH_DAMAGE_BASE);
       if (broadcastOnHit) {
         broadcastHit({
           attackerId: playerId,
           targetId: opponentId,
           damage: amount,
         });
+      } else if (!guarded) {
+        // /world path only — PunchCollisionDetector isn't mounted here, so
+        // sound the cue directly off the driver. In /game (broadcastOnHit
+        // true) the collision detector plays the cue so we skip it to avoid
+        // a double-trigger.
+        playHit();
       }
     },
     [refreshArm, playerId, opponentId, broadcastOnHit],
