@@ -103,6 +103,7 @@ export default function SearchPage() {
               onChange={(e) => setQuery(e.target.value)}
               disabled={loading}
               autoFocus
+              suppressHydrationWarning
             />
             <button
               type="submit"

@@ -78,9 +78,16 @@ function PunchDebugLayer({
   // the user physically threw.
   const onPunch = useCallback((side: "left" | "right") => {
     const mirrored = side === "left" ? "right" : "left";
-    usePoseStore.getState().setPunchAnim(SELF_PLAYER_ID, mirrored, 400);
+    usePoseStore.getState().setPunchAnim(SELF_PLAYER_ID, mirrored);
   }, []);
-  const { onCalibrate, onResetCounts } = usePunchDetector({ onPunch });
+  const onRelease = useCallback((side: "left" | "right") => {
+    const mirrored = side === "left" ? "right" : "left";
+    usePoseStore.getState().markPunchReleased(SELF_PLAYER_ID, mirrored);
+  }, []);
+  const { onCalibrate, onResetCounts } = usePunchDetector({
+    onPunch,
+    onRelease,
+  });
 
   return (
     <>

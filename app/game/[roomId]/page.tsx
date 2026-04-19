@@ -12,6 +12,8 @@ import { usePoseSync } from "@/hooks/usePoseSync";
 import { endMatch, getRoomByCode } from "@/lib/multiplayer/roomService";
 import { useGameStore } from "@/lib/store/gameStore";
 import { usePoseStore } from "@/lib/store/poseStore";
+import { useRemoteGuardStore } from "@/lib/store/remoteGuardStore";
+import { setHitBroadcaster } from "@/lib/multiplayer/hitBroadcaster";
 import { REMOTE_PLAYER_ID, SELF_PLAYER_ID } from "@/types";
 
 type GameStep = "calibrate" | "game";
@@ -44,12 +46,18 @@ export default function GamePage() {
     };
   }, [code, setHostId]);
 
-  const { broadcastGameEvent, broadcastPoseSnapshot, connected, players, peerBroadcastSeen } = useGameChannel({
+  const { broadcastGameEvent, broadcastHit, broadcastPoseSnapshot, connected, players, peerBroadcastSeen } = useGameChannel({
     roomId: roomUuid ?? "",
     playerId,
     playerName: playerName || playerId,
     onGameEvent: (e) => {
       if (e.type === "game_end") router.push(`/lobby/${code}`);
+    },
+    onHit: (hit) => {
+      // Peer-authored hit — they landed a punch on `targetId` with `damage`
+      // already guard-multiplied on the sender side. Mirror it locally so
+      // both tabs converge to the same HP.
+      useGameStore.getState().damagePlayer(hit.targetId, hit.damage);
     },
     onPoseSnapshot: (snap) => {
       // Ignore our own echo (GameChannel uses broadcast self:false, so this
@@ -63,10 +71,18 @@ export default function GamePage() {
       // `hookem:playerId` in localStorage — common when testing two tabs in
       // one browser profile.
       console.log("[pose-sync] recv from", snap.playerId, "self=", playerId, "hasRig=", !!snap.rig);
-      if (!snap.rig || snap.playerId === playerId) return;
-      usePoseStore.getState().setRig(REMOTE_PLAYER_ID, snap.rig);
+      if (snap.playerId === playerId) return;
+      if (snap.rig) usePoseStore.getState().setRig(REMOTE_PLAYER_ID, snap.rig);
+      if (snap.inGuard) useRemoteGuardStore.getState().set(snap.inGuard);
     },
   });
+
+  // Register the channel's broadcastHit so PunchCollisionDetector can publish
+  // landed hits. Cleared on unmount so a stale ref doesn't leak across rooms.
+  useEffect(() => {
+    setHitBroadcaster(broadcastHit);
+    return () => setHitBroadcaster(null);
+  }, [broadcastHit]);
 
   usePoseSync({
     selfId: SELF_PLAYER_ID,

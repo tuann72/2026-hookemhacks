@@ -4,12 +4,12 @@ import { useCallback, useState } from "react";
 import dynamic from "next/dynamic";
 import BodyDetector from "@/components/detection/BodyDetector";
 import { CVRigBridge } from "@/components/detection/CVRigBridge";
+import { IngestionBridge } from "@/components/detection/IngestionBridge";
 import { DropBallButton } from "@/components/game/DropBallButton";
 import { HPBars } from "@/components/game/HPBars";
 import { CalibrateGuardPanel } from "@/components/detection/CalibrateGuardPanel";
 import { usePunchDetector } from "@/hooks/usePunchDetector";
 import { usePoseStore } from "@/lib/store/poseStore";
-import { IngestionBridge } from "@/components/detection/IngestionBridge";
 import { SELF_PLAYER_ID } from "@/types";
 
 // Full-screen 3D arena — same layout as /world, but mounted inside the
@@ -76,9 +76,16 @@ function PunchDebugLayer({
   // override plays on the same arm the user physically threw.
   const onPunch = useCallback((side: "left" | "right") => {
     const mirrored = side === "left" ? "right" : "left";
-    usePoseStore.getState().setPunchAnim(SELF_PLAYER_ID, mirrored, 400);
+    usePoseStore.getState().setPunchAnim(SELF_PLAYER_ID, mirrored);
   }, []);
-  const { onCalibrate, onResetCounts } = usePunchDetector({ onPunch });
+  const onRelease = useCallback((side: "left" | "right") => {
+    const mirrored = side === "left" ? "right" : "left";
+    usePoseStore.getState().markPunchReleased(SELF_PLAYER_ID, mirrored);
+  }, []);
+  const { onCalibrate, onResetCounts } = usePunchDetector({
+    onPunch,
+    onRelease,
+  });
 
   return (
     <>

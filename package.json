@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:e2e": "tsx scripts/e2e-pipeline.ts",
+    "test:e2e:cleanup": "tsx scripts/e2e-pipeline.ts --cleanup"
   },
   "dependencies": {
     "@google/genai": "^1.50.1",
@@ -29,9 +31,11 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/three": "^0.184.0",
+    "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

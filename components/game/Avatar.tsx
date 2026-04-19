@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Group } from "three";
@@ -8,8 +8,9 @@ import type { HumanoidBoneName, PlayerId } from "@/types";
 import { usePoseStore } from "@/lib/store/poseStore";
 import { useGameStore } from "@/lib/store/gameStore";
 import { applyRigRotations, type AvatarBones } from "@/lib/rigging";
-import { registerAvatarBody } from "./avatarCollision";
+import { registerAvatarBody, registerAvatarBones } from "./avatarCollision";
 import { applyPunchKeyframe } from "@/lib/rigging/punchAnim";
+import { EXTEND_MS, RECOVER_MS } from "@/lib/combat/damage";
 import { useArmSimStore } from "@/lib/store/armSimStore";
 
 // Rigged placeholder avatar — structured so Track 1's Kalidokit + VRM swap is
@@ -56,9 +57,18 @@ const NECK_LEN = 0.1;
 const HEAD_LEN = 0.22;
 
 const SHOULDER_OFFSET_X = 0.36;
-const UPPER_ARM_LEN = 0.3;
-const LOWER_ARM_LEN = 0.28;
+// Compromise length: long enough to cross the ~2.2 m slot gap (both fighters
+// positioned outside the red center circle), still reads as a boxer-like
+// arm once the whole avatar is AVATAR_SCALE'd up. Ratio ≈ 0.68 of body.
+const UPPER_ARM_LEN = 0.51;
+const LOWER_ARM_LEN = 0.51;
 const HAND_LEN = 0.12;
+
+// Uniform root scale applied to the whole avatar. Keeps arm/torso/head
+// proportions locked so the longer arms don't look cartoonishly skinny — the
+// body grows with them. Slot spacing in sportLayout.ts + opponent-head
+// height in GameCanvas.tsx are updated in tandem.
+export const AVATAR_SCALE = 1.6;
 
 const HIP_OFFSET_X = 0.12;
 const UPPER_LEG_LEN = 0.45;
@@ -119,6 +129,13 @@ export function Avatar({
     },
     [playerId],
   );
+
+  // Expose this avatar's bone-refs map so cross-avatar systems (e.g. the
+  // punch collision detector) can read world positions without prop-drilling.
+  useEffect(() => {
+    registerAvatarBones(playerId, bones.current);
+    return () => registerAvatarBones(playerId, null);
+  }, [playerId]);
 
   const phaseOffset = useRef(hashPlayerIdToPhase(playerId)).current;
 
@@ -222,30 +239,53 @@ export function Avatar({
     // Punch animation override — runs AFTER the CV rig (or idle fallback) so
     // the keyframe wins on the two punching-arm bones. Direct assignment
     // inside applyPunchKeyframe bypasses applyRigRotations' 0.35 lerp, so the
-    // thrust doesn't get dragged back toward the CV guard pose each frame.
+    // extension pose doesn't get dragged back toward the CV guard each frame.
+    //
+    // State machine:
+    //   releasedAt === null → extend from bent to fully straight over
+    //   EXTEND_MS, then HOLD at extension=1.
+    //   releasedAt !== null → recover from current extension back to 0 over
+    //   RECOVER_MS, then clear so CV resumes cleanly.
     const punch = pose?.punchAnim;
     if (punch) {
-      const elapsed = performance.now() - punch.startedAt;
-      const phase = elapsed / punch.durationMs;
-      if (phase >= 1) {
-        usePoseStore.getState().clearPunchAnim(playerId);
+      const now = performance.now();
+      let extension: number;
+      let clearAfter = false;
+      if (punch.releasedAt === null) {
+        extension = Math.min(1, (now - punch.startedAt) / EXTEND_MS);
       } else {
-        let target: THREE.Vector3 | null = null;
-        if (opponentHeadPos) {
-          opponentHeadVec.current.set(
-            opponentHeadPos[0],
-            opponentHeadPos[1],
-            opponentHeadPos[2],
-          );
-          target = opponentHeadVec.current;
+        const t = (now - punch.releasedAt) / RECOVER_MS;
+        if (t >= 1) {
+          // Final frame — apply extension=0 so the stretch scale snaps back
+          // to 1 cleanly before we drop control, then clear.
+          extension = 0;
+          clearAfter = true;
+        } else {
+          extension = Math.max(0, 1 - t);
         }
-        applyPunchKeyframe(bones.current, punch.side, phase, target);
       }
+
+      let target: THREE.Vector3 | null = null;
+      if (opponentHeadPos) {
+        opponentHeadVec.current.set(
+          opponentHeadPos[0],
+          opponentHeadPos[1],
+          opponentHeadPos[2],
+        );
+        target = opponentHeadVec.current;
+      }
+      applyPunchKeyframe(bones.current, punch.side, extension, target);
+      if (clearAfter) usePoseStore.getState().clearPunchAnim(playerId);
     }
   });
 
   return (
-    <group ref={rootRefCb} position={position} rotation={[0, rotationY, 0]}>
+    <group
+      ref={rootRefCb}
+      position={position}
+      rotation={[0, rotationY, 0]}
+      scale={AVATAR_SCALE}
+    >
       {/* Root transform → Hips pivot */}
       <group ref={bind("Hips")} position={[0, HIPS_Y, 0]}>
         {/* Pelvis visual (centered on hips) */}

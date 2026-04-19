@@ -1,43 +1,34 @@
 import * as THREE from "three";
 import type { AvatarBones } from "./index";
 
-// Three-stage jab keyframe, applied to the punching arm's UpperArm + LowerArm
-// after the CV rig has already been written. Each frame we overwrite those
-// two bones with a fixed keyframe target — no blending from the current
-// rotation — so the 0.35 lerp in applyRigRotations can't drag the punch back
-// toward the CV guard pose.
-//
-// Axis convention (matches armStateToRigRotations):
-//   UpperArm.x < 0 → arm swings forward (toward camera/opponent)
-//   LowerArm.x  ≈ 0 → elbow straight; negative → elbow bent forward
-//   UpperArm.z — side raise (signed; flip for left vs right)
-//
-// When `targetWorld` is provided (opponent head in world coords), the thrust
-// phase aims the upper arm along the shoulder→target direction instead of a
-// fixed forward angle. Lower arm still straightens at peak thrust.
+// Triangle-IK punch extension. The shoulder, elbow and hand form a 2-link
+// chain:
+//   A = UPPER_ARM_LEN (shoulder→elbow)
+//   B = LOWER_ARM_LEN (elbow→hand)
+// A single `extension ∈ [0, 1]` parameter drives the arm from bent-triangle
+// (elbow interior ≈ 90°, fist tucked) to fully-extended line (elbow = 180°,
+// fist at max reach). LowerArm.x falls straight out of that:
+//     elbowInterior = lerp(π/2, π, extension)
+//     LowerArm.x    = -(π - elbowInterior)     // 0 when straight
+// UpperArm aims along the shoulder→target direction (handled by the existing
+// aim helper), so at extension=1 the whole chain lies on the aim line.
 
 const SIDES = {
   left: { upper: "LeftUpperArm", lower: "LeftLowerArm" },
   right: { upper: "RightUpperArm", lower: "RightLowerArm" },
 } as const;
 
-const WINDUP = { upperX: 0.45, upperZ: 0.15, lowerX: -1.7 };
-// Fully horizontal thrust — UpperArm.x = -π/2 points the local rest-down arm
-// along avatar-local forward (+Z), which after the slot's rotationY flip is
-// world −Z for the red corner. Elbow locked to 0 so the arm extends straight.
+// Fallback aim when no target is provided — point forward in avatar-local
+// (+Z before the rotationY flip) at peak extension.
 const THRUST_FALLBACK = { upperX: -Math.PI / 2, upperZ: 0 };
-const THRUST_LOWER_X = 0;
-
-function smoothstep(t: number): number {
-  const c = Math.max(0, Math.min(1, t));
-  return c * c * (3 - 2 * c);
-}
+const ELBOW_MIN = Math.PI / 2; // extension=0 → 90° bend
+const ELBOW_MAX = Math.PI; // extension=1 → straight line
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-// Reusable scratch — these functions run every frame during a punch.
+// Reusable scratch — these run every frame during a punch.
 const _shoulderWorld = new THREE.Vector3();
 const _aimDir = new THREE.Vector3();
 const _parentQuat = new THREE.Quaternion();
@@ -48,9 +39,8 @@ const REST_ARM_DIR = new THREE.Vector3(0, -1, 0);
 /**
  * Euler (x, z) on the UpperArm needed to point its rest-down axis at
  * `targetWorld` from the shoulder pivot. Accounts for all ancestor
- * rotations (Hips → Spine → Chest → Shoulder) by transforming the world
- * aim direction into the shoulder's parent-local space before deriving
- * the Euler.
+ * rotations by transforming the world aim into the shoulder's
+ * parent-local space first.
  */
 function aimUpperArm(
   upperArm: THREE.Object3D,
@@ -75,22 +65,17 @@ function aimUpperArm(
 }
 
 /**
- * Write a jab keyframe to the punching arm's bones.
+ * Write the triangle-IK punch pose to the punching arm's bones.
  *
- * @param phase         0..1 normalized elapsed time.
- * @param targetWorld   optional opponent aim point (e.g. their head). When
- *                      present, thrust phase aims at this point; otherwise
- *                      uses a fixed forward-facing thrust.
- *
- * Segments: 0–0.15 windup, 0.15–0.5 thrust, 0.5–1.0 recover. The recover
- * target is the rig's REST pose (zeros) — once phase crosses 1 the caller
- * clears `punchAnim`, applyRigRotations takes over again, and its built-in
- * lerp eases the arm back toward wherever CV has it.
+ * @param extension  0..1. 0 = bent elbow (fist tucked); 1 = straight arm.
+ * @param targetWorld  optional aim point — if present, UpperArm aims at it
+ *                     regardless of `extension` (so the punch tracks a
+ *                     moving head during hold). Omitted → fixed forward.
  */
 export function applyPunchKeyframe(
   bones: AvatarBones,
   side: "left" | "right",
-  phase: number,
+  extension: number,
   targetWorld?: THREE.Vector3 | null,
 ): void {
   const { upper: upperName, lower: lowerName } = SIDES[side];
@@ -98,39 +83,24 @@ export function applyPunchKeyframe(
   const lower = bones[lowerName];
   if (!upper || !lower) return;
 
-  const zSign = side === "left" ? -1 : 1;
+  const e = Math.max(0, Math.min(1, extension));
 
-  // Thrust targets — dynamic aim when target supplied, fixed forward otherwise.
-  let thrustUpperX = THRUST_FALLBACK.upperX;
-  let thrustUpperZ = THRUST_FALLBACK.upperZ * zSign;
-  if (targetWorld) {
-    const aim = aimUpperArm(upper, targetWorld);
-    thrustUpperX = aim.x;
-    thrustUpperZ = aim.z;
-  }
-
-  const windupZ = WINDUP.upperZ * zSign;
-
+  // UpperArm: aim at target (or fixed forward fallback).
   let upperX: number;
   let upperZ: number;
-  let lowerX: number;
-
-  if (phase < 0.15) {
-    const t = smoothstep(phase / 0.15);
-    upperX = lerp(0, WINDUP.upperX, t);
-    upperZ = lerp(0, windupZ, t);
-    lowerX = lerp(0, WINDUP.lowerX, t);
-  } else if (phase < 0.5) {
-    const t = smoothstep((phase - 0.15) / 0.35);
-    upperX = lerp(WINDUP.upperX, thrustUpperX, t);
-    upperZ = lerp(windupZ, thrustUpperZ, t);
-    lowerX = lerp(WINDUP.lowerX, THRUST_LOWER_X, t);
+  if (targetWorld) {
+    const aim = aimUpperArm(upper, targetWorld);
+    upperX = aim.x;
+    upperZ = aim.z;
   } else {
-    const t = smoothstep((phase - 0.5) / 0.5);
-    upperX = lerp(thrustUpperX, 0, t);
-    upperZ = lerp(thrustUpperZ, 0, t);
-    lowerX = lerp(THRUST_LOWER_X, 0, t);
+    const zSign = side === "left" ? -1 : 1;
+    upperX = THRUST_FALLBACK.upperX;
+    upperZ = THRUST_FALLBACK.upperZ * zSign;
   }
+
+  // LowerArm: elbow opens from 90° → 180° as extension goes 0 → 1.
+  const elbowInterior = lerp(ELBOW_MIN, ELBOW_MAX, e);
+  const lowerX = -(Math.PI - elbowInterior);
 
   upper.rotation.x = upperX;
   upper.rotation.z = upperZ;
