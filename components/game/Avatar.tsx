@@ -1,12 +1,16 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
+import * as THREE from "three";
 import type { Group } from "three";
 import type { HumanoidBoneName, PlayerId } from "@/types";
 import { usePoseStore } from "@/lib/store/poseStore";
 import { useGameStore } from "@/lib/store/gameStore";
 import { applyRigRotations, type AvatarBones } from "@/lib/rigging";
+import { registerAvatarBody, registerAvatarBones } from "./avatarCollision";
+import { applyPunchKeyframe } from "@/lib/rigging/punchAnim";
+import { EXTEND_MS, RECOVER_MS } from "@/lib/combat/damage";
 
 // Rigged placeholder avatar — structured so Track 1's Kalidokit + VRM swap is
 // a drop-in. Every joint is its own <group> positioned at the joint's pivot;
@@ -34,6 +38,12 @@ export interface AvatarProps {
    * occupies.
    */
   tintOverride?: string;
+  /**
+   * World-space point the punching arm should aim at during the thrust
+   * phase — typically the opponent's head position. Omitted → punch thrusts
+   * straight forward in avatar-local space.
+   */
+  opponentHeadPos?: [number, number, number];
 }
 
 export type AvatarComponent = (props: AvatarProps) => React.ReactElement | null;
@@ -46,9 +56,18 @@ const NECK_LEN = 0.1;
 const HEAD_LEN = 0.22;
 
 const SHOULDER_OFFSET_X = 0.36;
-const UPPER_ARM_LEN = 0.3;
-const LOWER_ARM_LEN = 0.28;
+// Compromise length: long enough to cross the ~2.2 m slot gap (both fighters
+// positioned outside the red center circle), still reads as a boxer-like
+// arm once the whole avatar is AVATAR_SCALE'd up. Ratio ≈ 0.68 of body.
+const UPPER_ARM_LEN = 0.51;
+const LOWER_ARM_LEN = 0.51;
 const HAND_LEN = 0.12;
+
+// Uniform root scale applied to the whole avatar. Keeps arm/torso/head
+// proportions locked so the longer arms don't look cartoonishly skinny — the
+// body grows with them. Slot spacing in sportLayout.ts + opponent-head
+// height in GameCanvas.tsx are updated in tandem.
+export const AVATAR_SCALE = 1.6;
 
 const HIP_OFFSET_X = 0.12;
 const UPPER_LEG_LEN = 0.45;
@@ -71,9 +90,11 @@ export function Avatar({
   position = [0, 0, 0],
   rotationY = 0,
   tintOverride,
+  opponentHeadPos,
 }: AvatarProps) {
   const root = useRef<Group>(null);
   const bones = useRef<AvatarBones>({});
+  const opponentHeadVec = useRef(new THREE.Vector3());
 
   // Ref callback factory: each bone group registers itself under its humanoid
   // bone name so applyRigRotations can look it up O(1). Cached per-name so
@@ -97,6 +118,24 @@ export function Avatar({
   const player = useGameStore((s) => s.players.find((p) => p.id === playerId));
   const tint = tintOverride ?? player?.tint ?? "#f97316";
 
+  // Register root in the collision resolver. The separator in
+  // AvatarCollisionResolver reads these groups each frame and nudges their
+  // positions apart when two avatars overlap horizontally.
+  const rootRefCb = useCallback(
+    (el: Group | null) => {
+      root.current = el;
+      registerAvatarBody(playerId, el);
+    },
+    [playerId],
+  );
+
+  // Expose this avatar's bone-refs map so cross-avatar systems (e.g. the
+  // punch collision detector) can read world positions without prop-drilling.
+  useEffect(() => {
+    registerAvatarBones(playerId, bones.current);
+    return () => registerAvatarBones(playerId, null);
+  }, [playerId]);
+
   const phaseOffset = useRef(hashPlayerIdToPhase(playerId)).current;
 
   useFrame((state) => {
@@ -112,42 +151,84 @@ export function Avatar({
     const rigPose = pose?.rig?.pose;
     if (rigPose && Object.keys(rigPose).length > 0) {
       applyRigRotations(bones.current, pose!.rig!);
-      return;
+    } else {
+      // --- Idle fallback ---
+      // Drives the same bones so the avatar is never static in dev. When CV
+      // takes over, these rotations are simply overwritten by applyRigRotations.
+      const b = bones.current;
+      const sway = Math.sin(t * 0.8);
+      const breath = Math.sin(t * 2.2) * 0.02;
+
+      if (b.Spine) b.Spine.rotation.y = sway * 0.08;
+      if (b.Chest) b.Chest.rotation.x = breath;
+      if (b.Head) b.Head.rotation.y = Math.sin(t * 0.5) * 0.15;
+
+      // Minecraft Steve idle — arms hang straight down with an opposing
+      // forward/back swing so it reads like a gentle march. CV will
+      // overwrite these via applyRigRotations.
+      const armSwing = Math.sin(t * 1.6) * 0.35;
+      if (b.LeftUpperArm) {
+        b.LeftUpperArm.rotation.z = 0;
+        b.LeftUpperArm.rotation.x = armSwing;
+      }
+      if (b.RightUpperArm) {
+        b.RightUpperArm.rotation.z = 0;
+        b.RightUpperArm.rotation.x = -armSwing;
+      }
+      if (b.LeftLowerArm) b.LeftLowerArm.rotation.x = 0;
+      if (b.RightLowerArm) b.RightLowerArm.rotation.x = 0;
     }
 
-    // --- Idle fallback ---
-    // Drives the same bones so the avatar is never static in dev. When CV
-    // takes over, these rotations are simply overwritten by applyRigRotations.
-    const b = bones.current;
-    const sway = Math.sin(t * 0.8);
-    const breath = Math.sin(t * 2.2) * 0.02;
+    // Punch animation override — runs AFTER the CV rig (or idle fallback) so
+    // the keyframe wins on the two punching-arm bones. Direct assignment
+    // inside applyPunchKeyframe bypasses applyRigRotations' 0.35 lerp, so the
+    // extension pose doesn't get dragged back toward the CV guard each frame.
+    //
+    // State machine:
+    //   releasedAt === null → extend from bent to fully straight over
+    //   EXTEND_MS, then HOLD at extension=1.
+    //   releasedAt !== null → recover from current extension back to 0 over
+    //   RECOVER_MS, then clear so CV resumes cleanly.
+    const punch = pose?.punchAnim;
+    if (punch) {
+      const now = performance.now();
+      let extension: number;
+      let clearAfter = false;
+      if (punch.releasedAt === null) {
+        extension = Math.min(1, (now - punch.startedAt) / EXTEND_MS);
+      } else {
+        const t = (now - punch.releasedAt) / RECOVER_MS;
+        if (t >= 1) {
+          // Final frame — apply extension=0 so the stretch scale snaps back
+          // to 1 cleanly before we drop control, then clear.
+          extension = 0;
+          clearAfter = true;
+        } else {
+          extension = Math.max(0, 1 - t);
+        }
+      }
 
-    if (b.Spine) b.Spine.rotation.y = sway * 0.08;
-    if (b.Chest) b.Chest.rotation.x = breath;
-    if (b.Head) b.Head.rotation.y = Math.sin(t * 0.5) * 0.15;
-
-    // Relaxed arm-down idle with a gentle breathing sway. z-rotation near 0
-    // keeps arms hanging; a small positive value tilts them slightly out so
-    // they clear the torso visually.
-    // Minecraft Steve idle — arms hang straight down by the sides with an
-    // opposing forward/back swing so it reads like a gentle march. The two
-    // arms mirror (opposite phase) which is the natural human gait.
-    // CV will overwrite these via applyRigRotations.
-    const armSwing = Math.sin(t * 1.6) * 0.35;
-    if (b.LeftUpperArm) {
-      b.LeftUpperArm.rotation.z = 0;
-      b.LeftUpperArm.rotation.x = armSwing;
+      let target: THREE.Vector3 | null = null;
+      if (opponentHeadPos) {
+        opponentHeadVec.current.set(
+          opponentHeadPos[0],
+          opponentHeadPos[1],
+          opponentHeadPos[2],
+        );
+        target = opponentHeadVec.current;
+      }
+      applyPunchKeyframe(bones.current, punch.side, extension, target);
+      if (clearAfter) usePoseStore.getState().clearPunchAnim(playerId);
     }
-    if (b.RightUpperArm) {
-      b.RightUpperArm.rotation.z = 0;
-      b.RightUpperArm.rotation.x = -armSwing;
-    }
-    if (b.LeftLowerArm) b.LeftLowerArm.rotation.x = 0;
-    if (b.RightLowerArm) b.RightLowerArm.rotation.x = 0;
   });
 
   return (
-    <group ref={root} position={position} rotation={[0, rotationY, 0]}>
+    <group
+      ref={rootRefCb}
+      position={position}
+      rotation={[0, rotationY, 0]}
+      scale={AVATAR_SCALE}
+    >
       {/* Root transform → Hips pivot */}
       <group ref={bind("Hips")} position={[0, HIPS_Y, 0]}>
         {/* Pelvis visual (centered on hips) */}
