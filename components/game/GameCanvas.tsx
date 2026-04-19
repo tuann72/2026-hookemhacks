@@ -5,7 +5,6 @@ import { Environment, Html, OrbitControls, Stats } from "@react-three/drei";
 import { Suspense } from "react";
 import { AvatarCollisionResolver } from "./avatarCollision";
 import { FallingBalls } from "./FallingBalls";
-import { PunchCollisionDetector } from "./PunchCollisionDetector";
 import { World } from "./World";
 import { Avatar, AVATAR_SCALE, type AvatarComponent } from "./Avatar";
 import { RedBoxer } from "./RedBoxer";
@@ -83,7 +82,6 @@ export function GameCanvas({ debug = false, AvatarComponent = Avatar }: GameCanv
         })}
         {/* Lightweight XY separation — pushes overlapping avatars apart. */}
         <AvatarCollisionResolver />
-        <PunchCollisionDetector />
         <FallingBalls />
         <Environment preset="sunset" />
       </Suspense>
