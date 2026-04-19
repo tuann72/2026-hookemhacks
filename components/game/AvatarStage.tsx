@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import BodyDetector from "@/components/detection/BodyDetector";
 import { CVRigBridge } from "@/components/detection/CVRigBridge";
+import { IngestionBridge } from "@/components/detection/IngestionBridge";
 import { SELF_PLAYER_ID } from "@/types";
 
 // Self-contained 3D avatar block for embedding inside any 2D UI container.
@@ -38,10 +39,19 @@ function Booting() {
   );
 }
 
-export function AvatarStage({ debug = false }: { debug?: boolean }) {
+interface AvatarStageProps {
+  debug?: boolean;
+  roomId?: string;
+  playerId?: string;
+}
+
+export function AvatarStage({ debug = false, roomId, playerId }: AvatarStageProps) {
   return (
     <BodyDetector debug={debug}>
       <CVRigBridge playerId={SELF_PLAYER_ID} />
+      {roomId && playerId && (
+        <IngestionBridge roomId={roomId} playerId={playerId} />
+      )}
       <div
         style={{
           position: "absolute",

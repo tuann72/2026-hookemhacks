@@ -4,9 +4,11 @@ import { AvatarStage } from "../game/AvatarStage";
 
 type GameScreenProps = {
   onEnd?: () => void;
+  roomId?: string;
+  playerId?: string;
 };
 
-export function GameScreen({ onEnd: _onEnd }: GameScreenProps) {
+export function GameScreen({ onEnd: _onEnd, roomId, playerId }: GameScreenProps) {
   return (
     <div className="game-wrap">
       <div className="game-field">
@@ -18,7 +20,7 @@ export function GameScreen({ onEnd: _onEnd }: GameScreenProps) {
             <div className="fake-palm" />
           </div>
           <div className="figure">
-            <AvatarStage />
+            <AvatarStage roomId={roomId} playerId={playerId} />
           </div>
         </div>
 

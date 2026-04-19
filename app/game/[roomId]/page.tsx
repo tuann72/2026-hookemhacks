@@ -80,7 +80,9 @@ export default function GamePage() {
         />
       )}
 
-      {step === "game" && <GameScreen />}
+      {step === "game" && (
+        <GameScreen roomId={roomUuid ?? undefined} playerId={playerId || undefined} />
+      )}
 
       <style>{`
         .leave-match-btn {
