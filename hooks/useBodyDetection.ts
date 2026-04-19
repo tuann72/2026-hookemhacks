@@ -2,14 +2,22 @@
 
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import { initPose, processFrame, type RawPoseResult } from "@/lib/mediapipe/pose";
-import { buildArmState, buildHandState } from "@/lib/mediapipe/gestures";
-import type { BodyTrackingState, ArmState } from "@/types";
+import { buildArmState, buildHandState, buildTorsoState } from "@/lib/mediapipe/gestures";
+import type { BodyTrackingState, ArmState, TorsoState } from "@/types";
 import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
 
-const POSE = { LEFT_SHOULDER: 11, RIGHT_SHOULDER: 12, LEFT_ELBOW: 13, RIGHT_ELBOW: 14, LEFT_WRIST: 15, RIGHT_WRIST: 16 };
+const POSE = {
+  LEFT_SHOULDER: 11, RIGHT_SHOULDER: 12,
+  LEFT_ELBOW: 13, RIGHT_ELBOW: 14,
+  LEFT_WRIST: 15, RIGHT_WRIST: 16,
+  LEFT_HIP: 23, RIGHT_HIP: 24,
+};
 
 // Skeleton connections to draw: [from, to] pose landmark index pairs
 const ARM_CONNECTIONS: [number, number][] = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16]];
+// Torso quad: shoulder line, hip line, left side, right side. Lets you eyeball
+// lean/twist in the debug overlay alongside the arms.
+const TORSO_CONNECTIONS: [number, number][] = [[11, 23], [12, 24], [23, 24]];
 const HAND_CONNECTIONS: [number, number][] = [
   [0,1],[1,2],[2,3],[3,4],
   [0,5],[5,6],[6,7],[7,8],
@@ -55,11 +63,17 @@ function drawDebugCanvas(
     ctx.stroke();
   }
 
-  // Draw pose arm skeleton
+  // Draw pose arm + torso skeleton
   if (raw.poseLandmarks.length > 0) {
     const lm = raw.poseLandmarks[0];
     for (const [a, b] of ARM_CONNECTIONS) line(lm[a], lm[b], "#00ff00");
+    for (const [a, b] of TORSO_CONNECTIONS) {
+      if (lm[a] && lm[b]) line(lm[a], lm[b], "#ffcc00");
+    }
     for (const idx of [11, 12, 13, 14, 15, 16]) dot(lm[idx], "#00ff00");
+    for (const idx of [23, 24]) {
+      if (lm[idx]) dot(lm[idx], "#ffcc00");
+    }
   }
 
   // Draw hands
@@ -81,10 +95,12 @@ type BodyTrackingContextValue = BodyTrackingState & {
 const defaultState: BodyTrackingContextValue = {
   leftArm: null,
   rightArm: null,
+  torso: null,
   leftHand: null,
   rightHand: null,
   leftHandLandmarks: null,
   rightHandLandmarks: null,
+  poseLandmarks: null,
   fps: 0,
   isReady: false,
   videoRef: null,
@@ -136,6 +152,7 @@ export function useBodyDetectionProvider(
 
     let leftArm: ArmState | null = null;
     let rightArm: ArmState | null = null;
+    let torso: TorsoState | null = null;
 
     if (raw.poseLandmarks.length > 0) {
       const lm = raw.poseLandmarks[0];
@@ -151,6 +168,17 @@ export function useBodyDetectionProvider(
         prevWristsRef.current.right, dt,
       );
       prevWristsRef.current = { left: lm[POSE.RIGHT_WRIST], right: lm[POSE.LEFT_WRIST] };
+
+      // Torso uses world landmarks (meters, hip-centered) — the per-axis
+      // math there is robust to camera perspective. Skip if any of the
+      // four landmarks is missing (e.g. dropped frame).
+      const ls = wlm?.[POSE.LEFT_SHOULDER];
+      const rs = wlm?.[POSE.RIGHT_SHOULDER];
+      const lh = wlm?.[POSE.LEFT_HIP];
+      const rh = wlm?.[POSE.RIGHT_HIP];
+      if (ls && rs && lh && rh) {
+        torso = buildTorsoState(ls, rs, lh, rh);
+      }
     }
 
     fpsRef.current.count++;
@@ -161,10 +189,12 @@ export function useBodyDetectionProvider(
     setState((prev) => ({
       leftArm,
       rightArm,
+      torso,
       leftHand: raw.leftHandLandmarks ? buildHandState(raw.leftHandLandmarks) : null,
       rightHand: raw.rightHandLandmarks ? buildHandState(raw.rightHandLandmarks) : null,
       leftHandLandmarks: raw.leftHandLandmarks,
       rightHandLandmarks: raw.rightHandLandmarks,
+      poseLandmarks: raw.poseLandmarks.length > 0 ? raw.poseLandmarks[0] : null,
       fps: fps ?? prev.fps,
       isReady: true,
     }));

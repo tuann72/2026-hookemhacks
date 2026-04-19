@@ -6,6 +6,7 @@ import { usePoseStore } from "@/lib/store/poseStore";
 import {
   armStateToRigRotations,
   handLandmarksToFingerRig,
+  torsoStateToRigRotations,
 } from "@/lib/rigging";
 import type { PlayerId, RigRotations } from "@/types";
 
@@ -25,6 +26,7 @@ export function CVRigBridge({ playerId }: { playerId: PlayerId }) {
   const {
     leftArm,
     rightArm,
+    torso,
     leftHandLandmarks,
     rightHandLandmarks,
     isReady,
@@ -34,19 +36,21 @@ export function CVRigBridge({ playerId }: { playerId: PlayerId }) {
     if (!isReady) return;
 
     const armRig = armStateToRigRotations(leftArm, rightArm);
+    const torsoRig = torsoStateToRigRotations(torso);
     const leftFingers = handLandmarksToFingerRig("Left", leftHandLandmarks);
     const rightFingers = handLandmarksToFingerRig("Right", rightHandLandmarks);
 
     const rig: RigRotations = {
       pose: {
         ...armRig.pose,
+        ...torsoRig.pose,
         ...leftFingers,
         ...rightFingers,
       },
     };
 
     usePoseStore.getState().setRig(playerId, rig);
-  }, [leftArm, rightArm, leftHandLandmarks, rightHandLandmarks, isReady, playerId]);
+  }, [leftArm, rightArm, torso, leftHandLandmarks, rightHandLandmarks, isReady, playerId]);
 
   return null;
 }

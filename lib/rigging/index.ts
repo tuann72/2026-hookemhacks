@@ -6,6 +6,7 @@ import type {
   HumanoidBoneName,
   PoseLandmark,
   RigRotations,
+  TorsoState,
 } from "@/types";
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
@@ -85,6 +86,38 @@ export function armStateToRigRotations(
     pose.RightLowerArm = { x: rightSign * toRad(180 - right.elbowAngle), y: 0, z: 0 };
   }
 
+  return { pose };
+}
+
+/**
+ * Convert CV-derived torso lean + twist into Spine/Chest rotations. With the
+ * slot's rotationY=π flip, same sign convention as the arm rig: negative x
+ * on Spine pitches the chest into the scene (forward lean). Side lean and
+ * twist are dampened a bit because MediaPipe pose is noisy at the small
+ * differences between shoulder/hip landmarks.
+ */
+const TORSO_LEAN_FORWARD_GAIN = 0.9;
+const TORSO_LEAN_SIDE_GAIN = 0.7;
+const TORSO_TWIST_GAIN = 0.8;
+
+export function torsoStateToRigRotations(torso: TorsoState | null): RigRotations {
+  const pose: Partial<Record<HumanoidBoneName, BoneRotation>> = {};
+  if (torso) {
+    // Spine carries the full-body lean. Chest carries the shoulder-vs-hip
+    // twist so the hips stay planted with the scene-space slot orientation.
+    // Sign note: Spine points +Y (up from Hips), so `rotation.x` flips the
+    // world-space forward direction vs the arm chain which hangs in −Y.
+    pose.Spine = {
+      x: torso.leanForward * TORSO_LEAN_FORWARD_GAIN,
+      y: 0,
+      z: -torso.leanSide * TORSO_LEAN_SIDE_GAIN,
+    };
+    pose.Chest = {
+      x: 0,
+      y: -torso.twist * TORSO_TWIST_GAIN,
+      z: 0,
+    };
+  }
   return { pose };
 }
 

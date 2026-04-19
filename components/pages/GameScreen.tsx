@@ -1,31 +1,42 @@
 "use client";
 
-import { AvatarStage } from "../game/AvatarStage";
+import dynamic from "next/dynamic";
+import BodyDetector from "@/components/detection/BodyDetector";
+import { CVRigBridge } from "@/components/detection/CVRigBridge";
+import { SELF_PLAYER_ID } from "@/types";
 
-type GameScreenProps = {
-  onEnd?: () => void;
-  roomId?: string;
-  playerId?: string;
-};
+// Full-screen 3D arena — same layout as /world, but mounted inside the
+// room-scoped /game/[roomId] route so the multiplayer channel + host-based
+// boxer assignment (GameCanvas) are live.
 
-export function GameScreen({ onEnd: _onEnd, roomId, playerId }: GameScreenProps) {
+const GameCanvas = dynamic(
+  () => import("../game/GameCanvas").then((m) => m.GameCanvas),
+  { ssr: false, loading: () => <CanvasFallback /> }
+);
+
+function CanvasFallback() {
   return (
-    <div className="game-wrap">
-      <div className="game-field">
-        <div className="game-view">
-          <div className="webcam-fake">
-            <div className="fake-sun" />
-            <div className="fake-volcano" />
-            <div className="fake-sand" />
-            <div className="fake-palm" />
-          </div>
-          <div className="figure">
-            <AvatarStage roomId={roomId} playerId={playerId} />
-          </div>
-        </div>
-
-        <div className="hud-side" />
+    <div className="flex h-full w-full items-center justify-center bg-black">
+      <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-500">
+        booting arena…
       </div>
     </div>
+  );
+}
+
+type GameScreenProps = { onEnd?: () => void };
+
+export function GameScreen({ onEnd: _onEnd }: GameScreenProps) {
+  const hideDebug =
+    typeof window !== "undefined" && window.location.search.includes("debug=0");
+  const debug = !hideDebug;
+
+  return (
+    <BodyDetector debug={debug}>
+      <CVRigBridge playerId={SELF_PLAYER_ID} />
+      <div className="relative h-screen w-screen overflow-hidden bg-black">
+        <GameCanvas debug={false} />
+      </div>
+    </BodyDetector>
   );
 }

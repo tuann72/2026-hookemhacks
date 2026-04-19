@@ -1,4 +1,4 @@
-import type { GestureLabel, ArmState, HandState } from "@/types";
+import type { GestureLabel, ArmState, HandState, TorsoState } from "@/types";
 
 type NormalizedLandmark = { x: number; y: number; z: number; visibility?: number };
 
@@ -183,4 +183,58 @@ export function buildHandState(landmarks: NormalizedLandmark[]): HandState {
     gesture: detectGesture(landmarks),
     pinchDistance: calcPinchDistance(landmarks),
   };
+}
+
+/**
+ * Compute torso lean + twist from the four shoulder/hip landmarks. Pass
+ * MediaPipe pose world landmarks (meters, origin at hip center) — the
+ * world-coordinate math is robust to camera perspective. MediaPipe's world
+ * frame: +x = subject's right, +y = down, +z = behind the subject.
+ */
+export function buildTorsoState(
+  leftShoulder: Vec3,
+  rightShoulder: Vec3,
+  leftHip: Vec3,
+  rightHip: Vec3,
+): TorsoState {
+  const midShoulder = {
+    x: (leftShoulder.x + rightShoulder.x) / 2,
+    y: (leftShoulder.y + rightShoulder.y) / 2,
+    z: (leftShoulder.z + rightShoulder.z) / 2,
+  };
+  const midHip = {
+    x: (leftHip.x + rightHip.x) / 2,
+    y: (leftHip.y + rightHip.y) / 2,
+    z: (leftHip.z + rightHip.z) / 2,
+  };
+  const torsoVec = {
+    x: midShoulder.x - midHip.x,
+    y: midShoulder.y - midHip.y,
+    z: midShoulder.z - midHip.z,
+  };
+  // Upright torso points "up" in the subject's frame, which is -y in MP
+  // world coords. leanForward: tilt toward camera (shoulders shift into
+  // -z) gives a positive angle. leanSide: shoulders shift in +x (subject's
+  // right) gives positive.
+  const upMag = Math.max(Math.abs(torsoVec.y), 0.05); // avoid div-by-near-zero
+  const leanForward = Math.atan2(-torsoVec.z, upMag);
+  const leanSide = Math.atan2(torsoVec.x, upMag);
+
+  // Twist: angle of the shoulder line in the horizontal (X-Z) plane minus
+  // the angle of the hip line. Unwound subject has both lines pointing in
+  // +x; twisting to the right sends the right shoulder back (+z) and
+  // rotates the shoulder-line angle while the hip line stays put.
+  const shoulderAngle = Math.atan2(
+    rightShoulder.z - leftShoulder.z,
+    rightShoulder.x - leftShoulder.x,
+  );
+  const hipAngle = Math.atan2(
+    rightHip.z - leftHip.z,
+    rightHip.x - leftHip.x,
+  );
+  let twist = shoulderAngle - hipAngle;
+  while (twist > Math.PI) twist -= 2 * Math.PI;
+  while (twist < -Math.PI) twist += 2 * Math.PI;
+
+  return { leanForward, leanSide, twist };
 }

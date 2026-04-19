@@ -17,11 +17,26 @@ import { applyRigRotations, type AvatarBones } from "@/lib/rigging";
 // so wiring real pose data is `applyRigRotations(bones, rig)` with zero name
 // remapping. See HOOKEMHACKS_CONTEXT.md — "Pose Data Flow".
 
-interface AvatarProps {
+/**
+ * Shared avatar component contract. Any drop-in avatar (GLTF model, VRM,
+ * custom mesh) should implement `AvatarComponent` so `GameCanvas` can swap
+ * it without further changes. See components/game/CustomAvatar.tsx for a
+ * GLTF skeleton-mapping example.
+ */
+export interface AvatarProps {
   playerId: PlayerId;
   position?: [number, number, number];
   rotationY?: number;
+  /**
+   * Force the body tint, bypassing the store's `player.tint`. Used by
+   * character-variant wrappers (e.g. RedBoxer, BlueBoxer) so the same rig
+   * renders with a committed color regardless of which slot the player
+   * occupies.
+   */
+  tintOverride?: string;
 }
+
+export type AvatarComponent = (props: AvatarProps) => React.ReactElement | null;
 
 // --- Rig proportions (meters) ---------------------------------------------
 const HIPS_Y = 1.0;
@@ -48,10 +63,14 @@ const HEAD_R = 0.17;
 
 const SKIN_COLOR = "#fde68a";
 
+const GLOVE_COLOR = "#dc2626";
+const GLOVE_R = 0.12;
+
 export function Avatar({
   playerId,
   position = [0, 0, 0],
   rotationY = 0,
+  tintOverride,
 }: AvatarProps) {
   const root = useRef<Group>(null);
   const bones = useRef<AvatarBones>({});
@@ -76,7 +95,7 @@ export function Avatar({
   }, []);
 
   const player = useGameStore((s) => s.players.find((p) => p.id === playerId));
-  const tint = player?.tint ?? "#f97316";
+  const tint = tintOverride ?? player?.tint ?? "#f97316";
 
   const phaseOffset = useRef(hashPlayerIdToPhase(playerId)).current;
 
@@ -196,6 +215,10 @@ export function Avatar({
                     />
                     <meshStandardMaterial color={tint} roughness={0.5} />
                   </mesh>
+                  <mesh position={[0, -LOWER_ARM_LEN, 0]} castShadow>
+                    <sphereGeometry args={[GLOVE_R, 20, 20]} />
+                    <meshStandardMaterial color={GLOVE_COLOR} roughness={0.45} />
+                  </mesh>
                 </group>
               </group>
             </group>
@@ -219,6 +242,10 @@ export function Avatar({
                       args={[LIMB_W * 0.85, LOWER_ARM_LEN, LIMB_W * 0.85]}
                     />
                     <meshStandardMaterial color={tint} roughness={0.5} />
+                  </mesh>
+                  <mesh position={[0, -LOWER_ARM_LEN, 0]} castShadow>
+                    <sphereGeometry args={[GLOVE_R, 20, 20]} />
+                    <meshStandardMaterial color={GLOVE_COLOR} roughness={0.45} />
                   </mesh>
                 </group>
               </group>
@@ -267,24 +294,19 @@ export function Avatar({
       </group>
 
       {/* nameplate — stays at a fixed world-space height regardless of rig */}
-      <NamePlate playerId={playerId} />
+      <NamePlate playerId={playerId} tint={tint} />
     </group>
   );
 }
 
-/**
- * Three-bone finger chain (Proximal → Intermediate → Distal). Each bone's
- * group is registered by its VRM humanoid name so Kalidokit's hand solver
- * can drive it by name with no remapping.
- */
-function NamePlate({ playerId }: { playerId: PlayerId }) {
+function NamePlate({ playerId, tint }: { playerId: PlayerId; tint: string }) {
   const player = useGameStore((s) => s.players.find((p) => p.id === playerId));
   if (!player) return null;
   return (
     <mesh position={[0, 2.35, 0]}>
       <planeGeometry args={[0.9, 0.22]} />
       <meshBasicMaterial
-        color={player.isConnected ? player.tint : "#334155"}
+        color={player.isConnected ? tint : "#334155"}
         transparent
         opacity={player.isConnected ? 0.85 : 0.4}
         toneMapped={false}

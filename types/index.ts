@@ -101,7 +101,7 @@ export interface RigRotations {
   rightHand?: Record<string, unknown>;
 }
 
-export type Sport = "swords" | "tennis" | "golf";
+export type Sport = "swords" | "tennis" | "golf" | "boxing";
 
 export type GamePhase = "idle" | "countdown" | "playing" | "paused" | "ended";
 
@@ -177,9 +177,23 @@ export interface HandState {
   pinchDistance: number;
 }
 
+/**
+ * Torso orientation derived from the four shoulder/hip pose landmarks.
+ * Drives Spine + Chest rotations on the avatar.
+ */
+export interface TorsoState {
+  /** Radians — pitch. + = leaning forward (chest toward camera), 0 = upright. */
+  leanForward: number;
+  /** Radians — roll. + = leaning to the subject's own right side. */
+  leanSide: number;
+  /** Radians — yaw. + = shoulders rotated to subject's right relative to hips. */
+  twist: number;
+}
+
 export interface BodyTrackingState {
   leftArm: ArmState | null;
   rightArm: ArmState | null;
+  torso: TorsoState | null;
   leftHand: HandState | null;
   rightHand: HandState | null;
   /**
@@ -190,6 +204,12 @@ export interface BodyTrackingState {
    */
   leftHandLandmarks: PoseLandmark[] | null;
   rightHandLandmarks: PoseLandmark[] | null;
+  /**
+   * Raw 33-landmark MediaPipe pose output for the detected person. `null`
+   * when no pose is detected on this frame. Exposed so consumers can draw
+   * custom skeleton overlays (e.g. arms-only) without re-running the model.
+   */
+  poseLandmarks: PoseLandmark[] | null;
   fps: number;
   isReady: boolean;
 }

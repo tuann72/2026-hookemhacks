@@ -2,30 +2,36 @@
 
 import { useEffect, useRef } from "react";
 import { usePoseStore } from "@/lib/store/poseStore";
-import type { PlayerId, PoseLandmark } from "@/types";
+import type { PlayerId } from "@/types";
+import type { PoseSnapshot } from "@/lib/multiplayer/types";
 
-// TRACK 3 — replace this stub with Supabase Realtime broadcast for pose frames.
-// Responsibilities:
-//   1. Throttle local pose broadcasts to 10-15fps (see HOOKEMHACKS_CONTEXT.md
-//      "Multiplayer pose sync bandwidth" — throttle, quantize, or send deltas).
-//   2. Receive remote pose frames and push them into usePoseStore under the
-//      sender's PlayerId.
-//
-// Suggested wire format (keep compact — 33 * 3 floats is ~400 bytes already):
-//   { t: number; lm: Array<[x,y,z]>; }  // visibility dropped remote-side
+// Subscribes to the local player's rig in usePoseStore and pushes it over the
+// Realtime channel at a bounded rate. Receiver-side mapping lives in the game
+// page's `onPoseSnapshot` handler — it routes the incoming rig into the
+// REMOTE_PLAYER_ID pose slot so the opponent avatar animates.
 
 const BROADCAST_HZ = 12;
 
 export interface UsePoseSyncOptions {
-  roomId: string;
+  /** Pose-store slot the local CV pipeline writes to — typically SELF_PLAYER_ID. */
   selfId: PlayerId;
+  /** GameChannel.broadcastPoseSnapshot from useGameChannel. */
+  broadcast: (snapshot: Omit<PoseSnapshot, "playerId" | "timestamp">) => void;
+  /** When false, subscription is a no-op (e.g. while the channel is still connecting). */
+  enabled?: boolean;
 }
 
-export function usePoseSync({ roomId, selfId }: UsePoseSyncOptions) {
+export function usePoseSync({ selfId, broadcast, enabled = true }: UsePoseSyncOptions) {
   const lastSendMs = useRef(0);
+  const sendCount = useRef(0);
 
   useEffect(() => {
-    // Stub: no real channel. Track 3 subscribes here.
+    // DEBUG(multiplayer-broadcast-flakiness): logs every transition of the
+    // `enabled` gate (driven by `connected && !!roomUuid` in the game page).
+    // If this flips to false mid-match, broadcasts stop — so this is the
+    // first place to check when the opponent avatar freezes.
+    console.log("[pose-sync] enabled=", enabled);
+    if (!enabled) return;
     const interval = 1000 / BROADCAST_HZ;
 
     const unsub = usePoseStore.subscribe((state) => {
@@ -33,29 +39,21 @@ export function usePoseSync({ roomId, selfId }: UsePoseSyncOptions) {
       if (now - lastSendMs.current < interval) return;
 
       const mine = state.players[selfId];
-      if (!mine?.landmarks) return;
+      const rig = mine?.rig;
+      if (!rig?.pose || Object.keys(rig.pose).length === 0) return;
 
       lastSendMs.current = now;
-
-      // Track 3: replace with `channel.send({ type: "broadcast", event: "pose", payload: { ... } })`
-      void mine;
-      void roomId;
+      sendCount.current++;
+      // DEBUG(multiplayer-broadcast-flakiness): log the 1st broadcast and
+      // every 24th (~2s at 12 Hz) so we can see the local sender is alive
+      // without spamming the console. `sendCount` staying at 0 = CV pipeline
+      // isn't producing a rig (camera / BodyDetector issue, not realtime).
+      if (sendCount.current === 1 || sendCount.current % 24 === 0) {
+        console.log("[pose-sync] broadcast #", sendCount.current, "bones=", Object.keys(rig.pose).length);
+      }
+      broadcast({ rig });
     });
 
-    return () => {
-      unsub();
-    };
-  }, [roomId, selfId]);
-}
-
-/**
- * Track 3 calls this when a remote pose frame arrives on the Realtime channel.
- * Exposed as a pure utility so it's unit-testable without mounting React.
- */
-export function applyRemotePoseFrame(
-  playerId: PlayerId,
-  landmarks: PoseLandmark[],
-  timestampMs: number
-) {
-  usePoseStore.getState().setLandmarks(playerId, landmarks, timestampMs);
+    return unsub;
+  }, [selfId, broadcast, enabled]);
 }
