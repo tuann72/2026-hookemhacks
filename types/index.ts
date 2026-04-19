@@ -115,6 +115,10 @@ export interface Player {
   displayName: string;
   tint: string; // primary avatar color (hex)
   score: number;
+  /** Current hit points. 0 = knocked out. */
+  hp: number;
+  /** Starting / ceiling hit points for this match. */
+  maxHp: number;
   isLocal: boolean;
   isConnected: boolean;
 }

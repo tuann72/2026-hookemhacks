@@ -4,6 +4,8 @@ import { useCallback, useState } from "react";
 import dynamic from "next/dynamic";
 import BodyDetector from "@/components/detection/BodyDetector";
 import { CVRigBridge } from "@/components/detection/CVRigBridge";
+import { DropBallButton } from "@/components/game/DropBallButton";
+import { HPBars } from "@/components/game/HPBars";
 import { CalibrateGuardPanel } from "@/components/detection/CalibrateGuardPanel";
 import { usePunchDetector } from "@/hooks/usePunchDetector";
 import { usePoseStore } from "@/lib/store/poseStore";
@@ -40,6 +42,11 @@ export function GameScreen({ onEnd: _onEnd }: GameScreenProps) {
   return (
     <BodyDetector debug={debug}>
       <CVRigBridge playerId={SELF_PLAYER_ID} />
+      <div className="relative h-screen w-screen overflow-hidden bg-black">
+        <GameCanvas debug={false} />
+        <HPBars />
+        <DropBallButton />
+      </div>
       <GameStageContent
         debugPanel={debugPanel}
         onToggleDebug={() => setDebugPanel((v) => !v)}

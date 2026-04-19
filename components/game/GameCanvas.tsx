@@ -3,6 +3,8 @@
 import { Canvas } from "@react-three/fiber";
 import { Environment, OrbitControls, Stats } from "@react-three/drei";
 import { Suspense } from "react";
+import { AvatarCollisionResolver } from "./avatarCollision";
+import { FallingBalls } from "./FallingBalls";
 import { World } from "./World";
 import { Avatar, type AvatarComponent } from "./Avatar";
 import { RedBoxer } from "./RedBoxer";
@@ -76,6 +78,9 @@ export function GameCanvas({ debug = false, AvatarComponent = Avatar }: GameCanv
             />
           );
         })}
+        {/* Lightweight XY separation — pushes overlapping avatars apart. */}
+        <AvatarCollisionResolver />
+        <FallingBalls />
         <Environment preset="sunset" />
       </Suspense>
 
