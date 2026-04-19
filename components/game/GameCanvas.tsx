@@ -8,12 +8,9 @@ import { AvatarCollisionResolver } from "./avatarCollision";
 import { FallingBalls } from "./FallingBalls";
 import { World } from "./World";
 import { Avatar, AVATAR_SCALE, type AvatarComponent } from "./Avatar";
-import { RedBoxer } from "./RedBoxer";
-import { BlueBoxer } from "./BlueBoxer";
 import { useGameStore } from "@/lib/store/gameStore";
 import { useCameraStore } from "@/lib/store/cameraStore";
 import { useViewSettingsStore } from "@/lib/store/viewSettingsStore";
-import { useIdentity } from "@/hooks/useIdentity";
 import { PLAYER_SLOTS } from "@/lib/game/sportLayout";
 
 interface GameCanvasProps {
@@ -32,14 +29,7 @@ interface GameCanvasProps {
 export function GameCanvas({ debug = false, AvatarComponent = Avatar }: GameCanvasProps) {
   const sport = useGameStore((s) => s.sport);
   const players = useGameStore((s) => s.players);
-  const hostId = useGameStore((s) => s.hostId);
-  const { playerId: localId } = useIdentity();
   const slots = PLAYER_SLOTS[sport];
-
-  // Host = red boxer, joiner = blue. Fallback while hostId is still loading:
-  // treat the local player as the host so avatars render immediately. Worst
-  // case is a one-frame color flip once the room lookup resolves.
-  const isLocalHost = !hostId || localId === hostId;
 
   // First-person-ish POV: spawn camera just behind P1's head, pulled back
   // along the P2→P1 axis so the local avatar's silhouette reads at the
@@ -88,11 +78,6 @@ export function GameCanvas({ debug = false, AvatarComponent = Avatar }: GameCanv
         {players.map((p, i) => {
           const slot = slots[i];
           if (!slot) return null;
-          let BoxerComponent: AvatarComponent = AvatarComponent;
-          if (sport === "boxing") {
-            const isRed = p.isLocal ? isLocalHost : !isLocalHost;
-            BoxerComponent = isRed ? RedBoxer : BlueBoxer;
-          }
           // Opponent aim point — head sphere center in world space.
           //   HIPS_Y + SPINE_LEN + CHEST_LEN + NECK_LEN + (HEAD_LEN/2 − 0.02)
           //   = 1.0 + 0.2 + 0.25 + 0.1 + 0.09 ≈ 1.74
@@ -102,7 +87,7 @@ export function GameCanvas({ debug = false, AvatarComponent = Avatar }: GameCanv
             ? [opp.position[0], opp.position[1] + 1.74 * AVATAR_SCALE, opp.position[2]]
             : undefined;
           return (
-            <BoxerComponent
+            <AvatarComponent
               key={p.id}
               playerId={p.id}
               position={slot.position}

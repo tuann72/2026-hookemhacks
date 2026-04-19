@@ -16,8 +16,12 @@ import { useGameChannel } from "@/hooks/useGameChannel";
 import { useIdentity } from "@/hooks/useIdentity";
 import { copyToClipboard } from "@/lib/clipboard";
 import type { Room } from "@/lib/multiplayer/types";
-
-const AVATAR_COLORS = ["#FF6B4A", "#2BB3C0", "#2E7D5B", "#FF5E7E", "#FFD24A", "#8A5EE0", "#4A90E2", "#E06B4A"];
+import {
+  AVATAR_COLORS,
+  DEFAULT_AVATAR_TINT,
+  loadStoredTint,
+  saveStoredTint,
+} from "@/lib/game/avatarColors";
 
 export default function LobbyPage() {
   const router = useRouter();
@@ -30,6 +34,13 @@ export default function LobbyPage() {
   const [starting, setStarting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [localReady, setLocalReady] = useState(false);
+  // Local tint preference. Seed from localStorage on mount so returning players
+  // see their last choice; broadcast via presence once the channel is up.
+  const [localTint, setLocalTint] = useState<string>(DEFAULT_AVATAR_TINT);
+  useEffect(() => {
+    const stored = loadStoredTint();
+    if (stored) setLocalTint(stored);
+  }, []);
 
   // Fetch room by code; idempotently ensure membership in room_players.
   useEffect(() => {
@@ -68,14 +79,43 @@ export default function LobbyPage() {
     };
   }, [code, playerId, router]);
 
-  const { players, broadcastGameEvent, setReady } = useGameChannel({
-    roomId: room?.id ?? "",
-    playerId,
-    playerName: playerName || playerId,
-    onGameEvent: (e) => {
-      if (e.type === "game_start") router.push(`/game/${code}`);
-    },
-  });
+  const { players, broadcastGameEvent, setReady, setTint, connected } =
+    useGameChannel({
+      roomId: room?.id ?? "",
+      playerId,
+      playerName: playerName || playerId,
+      onGameEvent: (e) => {
+        if (e.type === "game_start") router.push(`/game/${code}`);
+      },
+    });
+
+  // Push tint into presence whenever the user picks a new one. Also fires on
+  // first (re)connection so the channel always has the right value.
+  useEffect(() => {
+    if (!connected) return;
+    setTint(localTint);
+  }, [connected, localTint, setTint]);
+
+  const [tintMenuOpen, setTintMenuOpen] = useState(false);
+  const handlePickTint = useCallback((tint: string) => {
+    setLocalTint(tint);
+    saveStoredTint(tint);
+    setTintMenuOpen(false);
+  }, []);
+  // Close the color dropdown when clicking anywhere else or hitting Escape.
+  useEffect(() => {
+    if (!tintMenuOpen) return;
+    const close = () => setTintMenuOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [tintMenuOpen]);
 
   const isHost = !!room && room.host_id === playerId;
   const maxPlayers = room?.max_players ?? 2;
@@ -87,7 +127,9 @@ export default function LobbyPage() {
   // Restore `players.length >= 2 &&` before shipping.
   const allReady =
     players.length >= 1 &&
-    players.every((p) => (p.playerId === playerId ? localReady || p.ready : p.ready));
+    players.every((p) =>
+      p.playerId === playerId ? localReady || p.ready : p.ready,
+    );
 
   const copyCode = async () => {
     await copyToClipboard(code);
@@ -135,28 +177,29 @@ export default function LobbyPage() {
         {/* ── Left: player list ── */}
         <div className="lobby-panel card">
           <div className="hj-eyebrow">{BRAND.gameName} · Lobby</div>
-          <h2 className="hj-title" style={{ fontSize: "clamp(24px, 4vw, 36px)", marginBottom: 4 }}>
-            Build a cove.
-          </h2>
 
-          <div className="room-code-label" style={{ marginTop: 16 }}>Your room word</div>
-          <div className="room-code">
+          <div
+            className="room-code-label"
+            style={{ marginTop: 16, textAlign: "center" }}
+          >
+            Room Code
+          </div>
+          <div className="room-code" style={{ justifyContent: "center" }}>
             {code.split("").map((c, i) => (
-              <div key={i} className="code-digit">{c}</div>
+              <div key={i} className="code-digit">
+                {c}
+              </div>
             ))}
           </div>
           <div className="copy-row">
             <span>Share this with friends</span>
-            <button type="button" className={`copy-btn ${copied ? "copied" : ""}`} onClick={copyCode}>
+            <button
+              type="button"
+              className={`copy-btn ${copied ? "copied" : ""}`}
+              onClick={copyCode}
+            >
               {copied ? "✓ COPIED" : "COPY CODE"}
             </button>
-          </div>
-
-          <div className="players-label" style={{ marginTop: 20 }}>
-            <span>Crew in the cove</span>
-            <span className="count">
-              {players.filter((p) => p.ready).length}/{players.length} ready
-            </span>
           </div>
 
           {loadError && (
@@ -169,34 +212,88 @@ export default function LobbyPage() {
             {players.map((p, i) => {
               const isSelf = p.playerId === playerId;
               const isRoomHost = room?.host_id === p.playerId;
-              const displayName = isSelf ? "You" : (p.name || p.playerId);
+              const displayName = isSelf ? "You" : p.name || p.playerId;
               const presenceReady = Boolean(p.ready);
-              const rowReady = isSelf ? localReady || presenceReady : presenceReady;
+              const rowReady = isSelf
+                ? localReady || presenceReady
+                : presenceReady;
+              const rowTint = isSelf
+                ? localTint
+                : p.tint || AVATAR_COLORS[i % AVATAR_COLORS.length];
               return (
                 <div
                   key={p.playerId}
                   className={`player-row ${isRoomHost ? "host" : ""}`}
                 >
-                  <div className="avatar" style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>
-                    {(p.name || p.playerId)[0]?.toUpperCase() ?? "?"}
+                  <div className="avatar-cell">
+                    {isSelf ? (
+                      <button
+                        type="button"
+                        className="avatar avatar-btn"
+                        style={{ background: rowTint }}
+                        aria-label="Change avatar color"
+                        aria-haspopup="menu"
+                        aria-expanded={tintMenuOpen}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTintMenuOpen((v) => !v);
+                        }}
+                      />
+                    ) : (
+                      <div
+                        className="avatar"
+                        style={{ background: rowTint }}
+                      />
+                    )}
+                    {isSelf && tintMenuOpen && (
+                      <div
+                        className="tint-menu"
+                        role="menu"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {AVATAR_COLORS.map((c) => {
+                          const selected = c === localTint;
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={selected}
+                              aria-label={`Pick color ${c}`}
+                              onClick={() => handlePickTint(c)}
+                              className={`tint-swatch ${selected ? "selected" : ""}`}
+                              style={{ background: c }}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <div className="player-name">
                       {displayName}
-                      {isRoomHost && <span className="host-badge mono">HOST</span>}
-                    </div>
-                    <div className="player-meta mono">
-                      <span className={`ready-dot ${rowReady ? "" : "waiting"}`} />
-                      {rowReady ? "Ready" : "Calibrating…"}
+                      {isRoomHost && (
+                        <span className="host-badge mono">HOST</span>
+                      )}
                     </div>
                   </div>
-                  <div className="player-meta mono">P{i + 1}</div>
+                  <div className="player-meta mono">
+                    <span
+                      className={`ready-dot ${rowReady ? "" : "waiting"}`}
+                    />
+                    {rowReady ? "Ready" : "Calibrating…"}
+                  </div>
                 </div>
               );
             })}
             {Array.from({ length: emptySlots }).map((_, i) => (
               <div key={`empty-${i}`} className="player-row empty">
-                <div className="avatar" style={{ background: "rgba(58,46,76,0.15)" }}>?</div>
+                <div
+                  className="avatar"
+                  style={{ background: "rgba(58,46,76,0.15)" }}
+                >
+                  ?
+                </div>
                 <div>
                   <div className="player-name">Waiting for a buddy…</div>
                   <div className="player-meta mono">slot open</div>
@@ -211,7 +308,12 @@ export default function LobbyPage() {
               type="button"
               onClick={handleLeave}
               className="btn ghost"
-              style={{ flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center" }}
+              style={{
+                flex: "0 0 auto",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
             >
               ← Leave
             </button>
@@ -226,7 +328,12 @@ export default function LobbyPage() {
               return (
                 <div
                   className="btn ghost"
-                  style={{ flex: 1, textAlign: "center", opacity: 0.8, cursor: "default" }}
+                  style={{
+                    flex: 1,
+                    textAlign: "center",
+                    opacity: 0.8,
+                    cursor: "default",
+                  }}
                 >
                   {label}
                 </div>
@@ -281,6 +388,53 @@ export default function LobbyPage() {
           }
           .lobby-panel { flex: none; width: 100%; max-height: none; }
           .lobby-cal { height: 480px; width: 100%; }
+        }
+        .avatar-cell {
+          position: relative;
+          display: flex;
+          align-items: center;
+        }
+        .avatar-btn {
+          border: none;
+          padding: 0;
+          cursor: pointer;
+          transition: transform 120ms ease, box-shadow 120ms ease;
+        }
+        .avatar-btn:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
+        }
+        .tint-menu {
+          position: absolute;
+          top: 50%;
+          left: calc(100% + 10px);
+          transform: translateY(-50%);
+          display: flex;
+          gap: 8px;
+          padding: 8px;
+          border-radius: 12px;
+          background: white;
+          border: 1.5px solid rgba(58, 46, 76, 0.18);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+          z-index: 20;
+        }
+        .tint-swatch {
+          width: 28px;
+          height: 28px;
+          border-radius: 8px;
+          border: 2px solid rgba(58, 46, 76, 0.15);
+          cursor: pointer;
+          padding: 0;
+          transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+        }
+        .tint-swatch:hover {
+          transform: translateY(-1px);
+        }
+        .tint-swatch.selected {
+          border-color: var(--ink, #3a2e4c);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--sun, #ffd24a) 55%, transparent);
+          transform: translateY(-1px);
         }
       `}</style>
     </div>

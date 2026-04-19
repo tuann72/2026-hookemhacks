@@ -203,6 +203,10 @@ export function useGameChannel({
     void channelRef.current?.setReady(ready);
   }, []);
 
+  const setTint = useCallback((tint: string) => {
+    void channelRef.current?.setTint(tint);
+  }, []);
+
   return {
     connected,
     players,
@@ -213,5 +217,6 @@ export function useGameChannel({
     broadcastGameEvent,
     broadcastPoseSnapshot,
     setReady,
+    setTint,
   };
 }

@@ -37,6 +37,7 @@ export class GameChannel {
   /** Stable join time for this tab — avoids churning presence sort order on every ready toggle. */
   private readonly onlineAt: string;
   private ready = false;
+  private tint: string | undefined = undefined;
 
   // Reconnect bookkeeping. `handlers` is captured on the first subscribe() call
   // and reused when we have to rebuild the channel after a drop. `destroyed`
@@ -83,11 +84,17 @@ export class GameChannel {
       name: this.playerName,
       onlineAt: this.onlineAt,
       ready: this.ready,
+      tint: this.tint,
     });
   }
 
   async setReady(ready: boolean): Promise<void> {
     this.ready = ready;
+    await this.trackPresence();
+  }
+
+  async setTint(tint: string): Promise<void> {
+    this.tint = tint;
     await this.trackPresence();
   }
 
@@ -153,6 +160,7 @@ export class GameChannel {
             name: latest.name,
             onlineAt: latest.onlineAt,
             ready: anyReady,
+            tint: latest.tint,
           });
         }
         h.onPresenceChange!(players);

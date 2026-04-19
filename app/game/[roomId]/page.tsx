@@ -16,6 +16,7 @@ import { usePoseStore } from "@/lib/store/poseStore";
 import { useRemoteGuardStore } from "@/lib/store/remoteGuardStore";
 import { setHitBroadcaster } from "@/lib/multiplayer/hitBroadcaster";
 import { useCalibrationSignalStore } from "@/lib/store/calibrationSignalStore";
+import { loadStoredTint } from "@/lib/game/avatarColors";
 import { REMOTE_PLAYER_ID, SELF_PLAYER_ID } from "@/types";
 
 type GameStep = "calibrate" | "game";
@@ -33,6 +34,7 @@ export default function GamePage() {
   const setHostId = useGameStore((s) => s.setHostId);
   const setPlayerConnected = useGameStore((s) => s.setPlayerConnected);
   const setPlayerName = useGameStore((s) => s.setPlayerName);
+  const setPlayerTint = useGameStore((s) => s.setPlayerTint);
   const selfHp = useGameStore(
     (s) => s.players.find((p) => p.id === SELF_PLAYER_ID)?.hp ?? 100,
   );
@@ -56,7 +58,7 @@ export default function GamePage() {
     };
   }, [code, setHostId]);
 
-  const { broadcastGameEvent, broadcastHit, broadcastPoseSnapshot, connected, players, peerBroadcastSeen } = useGameChannel({
+  const { broadcastGameEvent, broadcastHit, broadcastPoseSnapshot, connected, players, peerBroadcastSeen, setTint } = useGameChannel({
     roomId: roomUuid ?? "",
     playerId,
     playerName: playerName || playerId,
@@ -149,6 +151,30 @@ export default function GamePage() {
     const peer = players.find((p) => p.playerId !== playerId);
     if (peer?.name) setPlayerName(REMOTE_PLAYER_ID, peer.name);
   }, [players, playerId, setPlayerName]);
+
+  // Seed self tint from the lobby choice (localStorage) on mount so the
+  // avatar reflects it even before presence has a chance to sync.
+  useEffect(() => {
+    const stored = loadStoredTint();
+    if (stored) setPlayerTint(SELF_PLAYER_ID, stored);
+  }, [setPlayerTint]);
+
+  // Push self tint up to presence when the channel connects so a direct
+  // /game entry (skipping lobby) still carries the preference.
+  useEffect(() => {
+    if (!connected) return;
+    const stored = loadStoredTint();
+    if (stored) setTint(stored);
+  }, [connected, setTint]);
+
+  // Mirror presence tints into gameStore for both sides — self + peer.
+  useEffect(() => {
+    const self = players.find((p) => p.playerId === playerId);
+    if (self?.tint) setPlayerTint(SELF_PLAYER_ID, self.tint);
+    const peer = players.find((p) => p.playerId !== playerId);
+    if (peer?.tint) setPlayerTint(REMOTE_PLAYER_ID, peer.tint);
+  }, [players, playerId, setPlayerTint]);
+
 
   // Lock in the winner the first time either HP reaches 0. Held until a
   // rematch event resets it so later store changes can't flip the outcome.

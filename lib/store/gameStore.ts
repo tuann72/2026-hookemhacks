@@ -19,6 +19,7 @@ interface GameStore {
   setHostId: (hostId: string | null) => void;
   addScore: (playerId: PlayerId, delta: number) => void;
   setPlayerName: (playerId: PlayerId, name: string) => void;
+  setPlayerTint: (playerId: PlayerId, tint: string) => void;
   setPlayerConnected: (playerId: PlayerId, connected: boolean) => void;
   /** Apply damage (positive = hurt, negative = heal). Clamps to [0, maxHp]. */
   damagePlayer: (playerId: PlayerId, amount: number) => void;
@@ -77,6 +78,12 @@ export const useGameStore = create<GameStore>((set) => ({
     set((s) => ({
       players: s.players.map((p) =>
         p.id === playerId ? { ...p, displayName: name } : p
+      ),
+    })),
+  setPlayerTint: (playerId, tint) =>
+    set((s) => ({
+      players: s.players.map((p) =>
+        p.id === playerId ? { ...p, tint } : p
       ),
     })),
   setPlayerConnected: (playerId, connected) =>

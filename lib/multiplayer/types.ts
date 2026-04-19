@@ -23,6 +23,8 @@ export interface PlayerPresence {
   name: string;
   onlineAt: string;
   ready: boolean;
+  /** Hex color chosen by the player in the lobby (6-color picker). */
+  tint?: string;
 }
 
 export interface PlayerState {

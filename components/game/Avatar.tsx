@@ -490,3 +490,4 @@ function hashPlayerIdToPhase(id: PlayerId): number {
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
   return ((h % 1000) / 1000) * Math.PI * 2;
 }
+
