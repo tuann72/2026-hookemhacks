@@ -16,7 +16,7 @@ import { usePoseStore } from "@/lib/store/poseStore";
 import { useRemoteGuardStore } from "@/lib/store/remoteGuardStore";
 import { setHitBroadcaster } from "@/lib/multiplayer/hitBroadcaster";
 import { useCameraStore } from "@/lib/store/cameraStore";
-import { isTargetInGuard } from "@/lib/combat";
+import { isTargetInGuard, EXTEND_MS, UPPERCUT_HOLD_MS } from "@/lib/combat";
 import { playEnd, playHit } from "@/lib/sound/player";
 import { loadStoredTint } from "@/lib/game/avatarColors";
 import { REMOTE_PLAYER_ID, SELF_PLAYER_ID } from "@/types";
@@ -118,11 +118,22 @@ export default function GamePage() {
       // their "remote" = our "self", and vice versa.
       const localTargetId = hit.targetId === REMOTE_PLAYER_ID ? SELF_PLAYER_ID : REMOTE_PLAYER_ID;
       useGameStore.getState().damagePlayer(localTargetId, hit.damage);
+
+      // Play the uppercut animation on the attacker's avatar (REMOTE from our
+      // perspective) so both players see the punch.
+      if (hit.isUppercut && hit.punchSide) {
+        const { setPunchAnim, markPunchReleased } = usePoseStore.getState();
+        setPunchAnim(REMOTE_PLAYER_ID, hit.punchSide, "uppercut");
+        setTimeout(() => {
+          markPunchReleased(REMOTE_PLAYER_ID, hit.punchSide!);
+        }, EXTEND_MS + UPPERCUT_HOLD_MS);
+      }
+
       // Direct hit on us (guard down) → wobble the camera and play the
       // impact cue. Local guard state is the source of truth for whether we
       // blocked it.
       if (localTargetId === SELF_PLAYER_ID && !isTargetInGuard(SELF_PLAYER_ID)) {
-        useCameraStore.getState().requestShake(1);
+        useCameraStore.getState().requestShake(hit.isUppercut ? 2 : 1);
         playHit();
       }
     },

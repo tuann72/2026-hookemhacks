@@ -77,7 +77,7 @@ export function useArmSimDriver({
         }, EXTEND_MS + UPPERCUT_HOLD_MS);
         const { amount, guarded } = applyDamage(opponentId, UPPERCUT_DAMAGE_BASE);
         if (broadcastOnHit) {
-          broadcastHit({ attackerId: playerId, targetId: opponentId, damage: amount });
+          broadcastHit({ attackerId: playerId, targetId: opponentId, damage: amount, isUppercut: true, punchSide: avatarSide });
         } else if (!guarded) {
           playHit();
         }

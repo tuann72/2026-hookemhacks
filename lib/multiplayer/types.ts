@@ -51,6 +51,10 @@ export interface HitEvent {
   targetId: string;
   damage: number;
   timestamp: number;
+  /** True when the hit was a charged uppercut. */
+  isUppercut?: boolean;
+  /** Which avatar arm threw the punch — used by the receiver to animate the remote avatar. */
+  punchSide?: "left" | "right";
 }
 
 export interface GameEvent {
