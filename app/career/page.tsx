@@ -355,6 +355,9 @@ export default function CareerPage() {
           backdrop-filter: blur(12px);
           padding: 22px 24px 26px;
           overflow: hidden;
+          max-width: 320px;
+          width: 100%;
+          margin: 0;
         }
         .scoreboard::before {
           content: "";
@@ -364,32 +367,12 @@ export default function CareerPage() {
           background: linear-gradient(90deg, var(--leaf) 0%, var(--sun) 50%, var(--coral) 100%);
           opacity: 0.9;
         }
-        .scoreboard-top {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          margin-bottom: 20px;
-        }
-        .scoreboard-eyebrow {
-          font-size: 11px;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: var(--sun);
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-        }
-        .scoreboard-last {
-          font-size: 11px;
-          letter-spacing: 0.08em;
-          color: var(--ink-soft);
-        }
-
         .scoreboard-main {
           display: flex;
           flex-direction: column;
+          align-items: center;
           gap: 22px;
+          text-align: center;
         }
 
         .score-split {
@@ -434,15 +417,17 @@ export default function CareerPage() {
         .score-meta {
           display: flex;
           flex-direction: column;
+          align-items: center;
           gap: 14px;
           padding-top: 18px;
           border-top: 1.5px dashed var(--card-border);
+          width: 100%;
         }
         .meta-row {
           display: flex;
-          justify-content: space-between;
+          justify-content: center;
           align-items: baseline;
-          gap: 16px;
+          gap: 12px;
         }
         .meta-label {
           font-family: var(--font-jetbrains-mono), monospace;
@@ -949,26 +934,9 @@ function CareerScoreboard({
   const winRatePct =
     record.winRate === null ? 0 : Math.round(record.winRate * 100);
   const winRateLabel = record.winRate === null ? "—" : `${winRatePct}%`;
-  const lastPlayed = record.lastPlayedAt
-    ? new Date(record.lastPlayedAt).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-      })
-    : null;
 
   return (
     <section className="scoreboard">
-      <div className="scoreboard-top">
-        <span className="scoreboard-eyebrow mono">
-          <span aria-hidden="true">◉</span> Lifetime record
-        </span>
-        {lastPlayed && (
-          <span className="scoreboard-last mono">
-            Last match · {lastPlayed}
-          </span>
-        )}
-      </div>
-
       <div className="scoreboard-main">
         <div className="score-split">
           <div className="score-cell wins">
@@ -1034,7 +1002,7 @@ function AggregateView({
           <span className="agg-answer-copy">
             {data.count === 0
               ? "Nothing on record yet — play a match and this fills in."
-              : prose ?? "on the books."}
+              : (prose ?? "on the books.")}
           </span>
         </div>
       )}
@@ -1055,9 +1023,7 @@ function AggregateView({
 
 function MatchRow({ match }: { match: Record<string, unknown> }) {
   const startedAt =
-    typeof match.started_at === "string"
-      ? new Date(match.started_at)
-      : null;
+    typeof match.started_at === "string" ? new Date(match.started_at) : null;
   const durationMs =
     typeof match.duration_ms === "number" ? match.duration_ms : null;
   const totals =
