@@ -52,7 +52,7 @@ export interface HitEvent {
 }
 
 export interface GameEvent {
-  type: "game_start" | "game_end" | "player_ready";
+  type: "game_start" | "game_end" | "player_ready" | "guard_ready";
   payload: Record<string, unknown>;
   timestamp: number;
 }

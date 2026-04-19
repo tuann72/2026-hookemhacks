@@ -8,6 +8,7 @@ import { IngestionBridge } from "@/components/detection/IngestionBridge";
 import { DropBallButton } from "@/components/game/DropBallButton";
 import { HPBars } from "@/components/game/HPBars";
 import { CalibrateGuardPanel } from "@/components/detection/CalibrateGuardPanel";
+import { GameLoadingOverlay } from "@/components/pages/GameLoadingOverlay";
 import { usePunchDetector } from "@/hooks/usePunchDetector";
 import { usePoseStore } from "@/lib/store/poseStore";
 import { SELF_PLAYER_ID } from "@/types";
@@ -35,9 +36,19 @@ type GameScreenProps = {
   onEnd?: () => void;
   roomId?: string;
   playerId?: string;
+  /** Peer sync complete — gate for dismissing the loading overlay. */
+  ready?: boolean;
+  /** Whether a peer is in presence; shapes the connecting-phase copy. */
+  hasPeerPresence?: boolean;
 };
 
-export function GameScreen({ onEnd: _onEnd, roomId, playerId }: GameScreenProps) {
+export function GameScreen({
+  onEnd: _onEnd,
+  roomId,
+  playerId,
+  ready = false,
+  hasPeerPresence = false,
+}: GameScreenProps) {
   const hideDebug =
     typeof window !== "undefined" && window.location.search.includes("debug=0");
   const debug = !hideDebug;
@@ -58,6 +69,7 @@ export function GameScreen({ onEnd: _onEnd, roomId, playerId }: GameScreenProps)
           onCloseDebug={() => setDebugPanel(false)}
         />
       </div>
+      <GameLoadingOverlay ready={ready} hasPeerPresence={hasPeerPresence} />
     </BodyDetector>
   );
 }
