@@ -64,6 +64,7 @@ export function useGameChannel({
   const MAX_KICKS = 6;
   const [kickAttempt, setKickAttempt] = useState(0);
   const lastPeerActivityRef = useRef(0);
+  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!roomId || !playerId) return;
@@ -111,6 +112,10 @@ export function useGameChannel({
 
     return () => {
       cancelled = true;
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = null;
+      }
       channel.unsubscribe();
       setConnected(false);
     };
@@ -145,7 +150,7 @@ export function useGameChannel({
       delay = 2000;
     }
 
-    const t = setTimeout(async () => {
+    fallbackTimerRef.current = setTimeout(async () => {
       if (kickAttempt > 0) {
         console.log("[GC] retry kick", kickAttempt + 1, "— peer presence but no broadcast");
       }
@@ -154,7 +159,12 @@ export function useGameChannel({
       // top short-circuits if `peerBroadcastSeen` flipped during the kick.
       setKickAttempt((n) => n + 1);
     }, delay);
-    return () => clearTimeout(t);
+    return () => {
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = null;
+      }
+    };
   }, [connected, players, playerId, peerBroadcastSeen, kickAttempt]);
 
   const broadcastPlayerState = useCallback(
