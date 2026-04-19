@@ -2,7 +2,15 @@
 
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import type { Group, Mesh } from "three";
+import {
+  AdditiveBlending,
+  CatmullRomCurve3,
+  DoubleSide,
+  Matrix4,
+  Quaternion,
+  Vector3,
+} from "three";
+import type { Mesh, PointLight } from "three";
 import type { Sport } from "@/types";
 import { SwordArena } from "./props/SwordArena";
 import { TennisCourt } from "./props/TennisCourt";
@@ -23,6 +31,11 @@ const COLOR_SAND = "#FFE5B4";
 const COLOR_SAND_WARM = "#F5C978";
 const COLOR_SUN = "#FF6B4A";
 const COLOR_LAVA = "#FF3D1F";
+const COLOR_LAVA_CORE = "#FF6B22";
+const COLOR_LAVA_GLOW = "#FF8C42";
+/** Crater fountain — white / yellow hot core like real eruption photos */
+const COLOR_ERUPT_CORE = "#FFFEF5";
+const COLOR_ERUPT_HOT = "#FFF0C8";
 const COLOR_VOLCANO = "#3A2E4C";
 const COLOR_VOLCANO_DEEP = "#261E35";
 const COLOR_OCEAN = "#1F4C6B";
@@ -225,6 +238,144 @@ interface VolcanoProps {
   hasLava?: boolean;
 }
 
+/**
+ * Parabolic lava arcs ejected from the crater (ballistic streaks), reference:
+ * thin glowing trails that fountain up then arc outward / down.
+ */
+function buildCraterFountainCurves(height: number, topRadius: number): CatmullRomCurve3[] {
+  /** Slightly softer gravity = longer, more theatrical arcs */
+  const g = 5.25;
+  const craterY = height + 0.042;
+  const curves: CatmullRomCurve3[] = [];
+
+  const pushArc = (
+    n: number,
+    seed: number,
+    rMin: number,
+    rMax: number,
+    alphaMinDeg: number,
+    alphaMaxDeg: number,
+    vpMin: number,
+    vpMax: number,
+    tMax: number,
+    yCutoff: number
+  ) => {
+    for (let i = 0; i < n; i++) {
+      const θ = (i / n) * Math.PI * 2 + seed + i * 0.11;
+      const u = ((i * 7919 + seed * 1000) % 997) / 997;
+      const rStart = topRadius * (rMin + u * (rMax - rMin));
+      const p0 = new Vector3(rStart * Math.cos(θ), craterY, rStart * Math.sin(θ));
+      const alphaDeg = alphaMinDeg + (((i * 13) % 100) / 100) * (alphaMaxDeg - alphaMinDeg);
+      const alpha = (alphaDeg * Math.PI) / 180;
+      const vp = vpMin + ((i * 17) % 10) / 10 * (vpMax - vpMin);
+      const vx = vp * Math.sin(alpha) * Math.cos(θ);
+      const vy = vp * Math.cos(alpha);
+      const vz = vp * Math.sin(alpha) * Math.sin(θ);
+      const pts: Vector3[] = [];
+      const steps = 24;
+      for (let s = 0; s <= steps; s++) {
+        const t = (s / steps) * tMax;
+        const y = p0.y + vy * t - 0.5 * g * t * t;
+        if (y < yCutoff) break;
+        pts.push(new Vector3(p0.x + vx * t, y, p0.z + vz * t));
+      }
+      if (pts.length >= 2) {
+        curves.push(new CatmullRomCurve3(pts));
+      }
+    }
+  };
+
+  // Tall arcs — main curtain of fire (higher speeds, longer hang time)
+  pushArc(54, 0.15, 0.04, 0.98, 22, 58, 2.55, 4.35, 1.12, height - 1.25);
+  // Dense vent spray from the hole itself
+  pushArc(38, 1.55, 0.008, 0.26, 12, 42, 1.95, 3.55, 0.68, height + 0.2);
+  // Near-vertical geyser jets
+  pushArc(14, 4.9, 0.01, 0.07, 6, 20, 3.1, 4.85, 0.48, height + 0.55);
+  // Wide ember hooks falling down the shoulders
+  pushArc(20, 3.05, 0.28, 0.95, 36, 68, 2.15, 3.65, 1.22, height - 1.55);
+
+  return curves;
+}
+
+/** Thin rim-anchored sheets (low profile on the cone) — reads as lava film, not tubes */
+function VolcanoLavaDrips({
+  height,
+  baseRadius,
+  topRadius,
+}: {
+  height: number;
+  baseRadius: number;
+  topRadius: number;
+}) {
+  const flatSheets = useMemo(() => {
+    const dir = new Vector3();
+    const tAzi = new Vector3();
+    const tMer = new Vector3();
+    const nOut = new Vector3();
+    const surf = new Vector3();
+    const u = new Vector3();
+    const basis = new Matrix4();
+    const quat = new Quaternion();
+    const drDy = (topRadius - baseRadius) / height;
+    const kCount = 8;
+    type Sheet = {
+      key: string;
+      pos: [number, number, number];
+      quat: [number, number, number, number];
+      len: number;
+      width: number;
+      thick: number;
+    };
+    const sheets: Sheet[] = [];
+    for (let k = 0; k < kCount; k++) {
+      const θ = (k / kCount) * Math.PI * 2 + 0.55;
+      const yAnchor = height * (0.89 + (k % 3) * 0.018);
+      const r = baseRadius + (topRadius - baseRadius) * (yAnchor / height);
+      const bulge = 0.006;
+      const surfX = (r + bulge) * Math.cos(θ);
+      const surfZ = (r + bulge) * Math.sin(θ);
+      dir.set(-drDy * Math.cos(θ), -1, -drDy * Math.sin(θ)).normalize();
+      tAzi.set(-Math.sin(θ), 0, Math.cos(θ));
+      tMer.set(drDy * Math.cos(θ), 1, drDy * Math.sin(θ)).normalize();
+      nOut.crossVectors(tMer, tAzi).normalize();
+      surf.set(surfX, yAnchor, surfZ);
+      if (nOut.dot(surf) < 0) nOut.negate();
+      u.crossVectors(nOut, dir).normalize();
+      basis.makeBasis(u, dir, nOut);
+      quat.setFromRotationMatrix(basis);
+      const len = 1.45 + (k % 5) * 0.28;
+      const off = len * 0.46;
+      sheets.push({
+        key: `s-${k}`,
+        pos: [surfX + dir.x * off, yAnchor + dir.y * off, surfZ + dir.z * off],
+        quat: [quat.x, quat.y, quat.z, quat.w],
+        len,
+        width: 0.038 + (k % 3) * 0.01,
+        thick: 0.008 + (k % 2) * 0.003,
+      });
+    }
+    return sheets;
+  }, [height, baseRadius, topRadius]);
+
+  return (
+    <group>
+      {flatSheets.map((s) => (
+        <mesh key={s.key} position={s.pos} quaternion={s.quat} castShadow>
+          <boxGeometry args={[s.width, s.len, s.thick]} />
+          <meshStandardMaterial
+            color={COLOR_LAVA}
+            emissive={COLOR_LAVA_CORE}
+            emissiveIntensity={1.55}
+            roughness={0.45}
+            metalness={0.08}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 function Volcano({
   position,
   height,
@@ -233,15 +384,76 @@ function Volcano({
   hasLava = true,
 }: VolcanoProps) {
   const lavaRef = useRef<Mesh>(null);
+  const innerGlowRef = useRef<Mesh>(null);
+  const coronaRef = useRef<Mesh>(null);
+  const lightRef = useRef<PointLight>(null);
+  const craterCoreRef = useRef<Mesh>(null);
+  const eruptMantleRef = useRef<Mesh>(null);
+  const eruptBloomRef = useRef<Mesh>(null);
+  const lavaFillLightRef = useRef<PointLight>(null);
+
+  const topRadius = baseRadius * 0.25;
+  const fountainCurves = useMemo(
+    () => buildCraterFountainCurves(height, topRadius),
+    [height, topRadius]
+  );
+  /** Upper open shell only — hot rock reads as molten near the rim */
+  const rimH = Math.min(2.8, height * 0.3);
+  const yRimBottom = height - rimH;
+  const rRimBottom =
+    baseRadius + (topRadius - baseRadius) * (yRimBottom / height);
+  const rRimTop = topRadius;
+
   useFrame((state) => {
-    if (!lavaRef.current) return;
     const t = state.clock.elapsedTime;
-    const m = lavaRef.current.material as { emissiveIntensity?: number };
-    if (m.emissiveIntensity !== undefined) {
-      m.emissiveIntensity = 1.4 + Math.sin(t * 2.0) * 0.3;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 3.4);
+    const roar = 0.55 + 0.45 * Math.sin(t * 0.9);
+    const flicker = pulse * 0.72 + roar * 0.28;
+
+    if (lavaRef.current) {
+      const m = lavaRef.current.material as { emissiveIntensity?: number };
+      if (m.emissiveIntensity !== undefined) {
+        m.emissiveIntensity = 2.05 + flicker * 1.1;
+      }
+    }
+    if (innerGlowRef.current) {
+      const m = innerGlowRef.current.material as { emissiveIntensity?: number };
+      if (m.emissiveIntensity !== undefined) {
+        m.emissiveIntensity = 1.05 + flicker * 1.15;
+      }
+    }
+    if (coronaRef.current) {
+      const m = coronaRef.current.material as { opacity?: number };
+      if (m.opacity !== undefined) {
+        m.opacity = 0.24 + flicker * 0.2;
+      }
+    }
+    if (lightRef.current) {
+      lightRef.current.intensity = 4.2 + flicker * 3.5;
+    }
+    if (lavaFillLightRef.current) {
+      lavaFillLightRef.current.intensity = 2.4 + pulse * 2.2;
+    }
+    if (craterCoreRef.current) {
+      const m = craterCoreRef.current.material as { emissiveIntensity?: number };
+      if (m.emissiveIntensity !== undefined) {
+        m.emissiveIntensity = 5.2 + flicker * 3.2;
+      }
+    }
+    if (eruptMantleRef.current) {
+      const m = eruptMantleRef.current.material as { opacity?: number };
+      if (m.opacity !== undefined) {
+        m.opacity = 0.4 + flicker * 0.32;
+      }
+    }
+    if (eruptBloomRef.current) {
+      const m = eruptBloomRef.current.material as { opacity?: number };
+      if (m.opacity !== undefined) {
+        m.opacity = 0.22 + flicker * 0.16;
+      }
     }
   });
-  const topRadius = baseRadius * 0.25;
+
   return (
     <group position={position}>
       {/* Truncated cone so the top is a flat crater the lava disc can sit in,
@@ -251,15 +463,114 @@ function Volcano({
         <meshStandardMaterial color={color} roughness={0.95} />
       </mesh>
       {hasLava && (
-        <mesh ref={lavaRef} position={[0, height + 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[topRadius, 20]} />
-          <meshStandardMaterial
-            color={COLOR_LAVA}
-            emissive={COLOR_LAVA}
-            emissiveIntensity={1.4}
-            toneMapped={false}
+        <>
+          {/* Inner upper funnel — back faces pick up orange so the cone lip
+              reads as glowing from molten rock below the crater opening */}
+          <mesh
+            ref={innerGlowRef}
+            position={[0, yRimBottom + rimH / 2, 0]}
+            castShadow={false}
+            receiveShadow
+          >
+            <cylinderGeometry args={[rRimTop * 0.98, rRimBottom * 0.96, rimH, 24, 1, true]} />
+            <meshStandardMaterial
+              color={COLOR_VOLCANO_DEEP}
+              emissive={COLOR_LAVA}
+              emissiveIntensity={1.15}
+              roughness={0.82}
+              metalness={0.1}
+              side={DoubleSide}
+            />
+          </mesh>
+          <pointLight
+            ref={lightRef}
+            position={[0, height + 0.18, 0]}
+            color={COLOR_ERUPT_CORE}
+            intensity={5.5}
+            distance={42}
+            decay={2}
           />
-        </mesh>
+          <pointLight
+            ref={lavaFillLightRef}
+            position={[0, height + 0.06, 0]}
+            color={COLOR_LAVA}
+            intensity={3.2}
+            distance={36}
+            decay={2}
+          />
+          {/* Soft heat above the rim — additive so it reads as lava light */}
+          <mesh ref={coronaRef} position={[0, height + 0.2, 0]}>
+            <sphereGeometry args={[Math.max(topRadius * 1.55, 0.95), 18, 14]} />
+            <meshBasicMaterial
+              color={COLOR_LAVA_GLOW}
+              transparent
+              opacity={0.28}
+              depthWrite={false}
+              toneMapped={false}
+              blending={AdditiveBlending}
+            />
+          </mesh>
+          <mesh ref={lavaRef} position={[0, height + 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <circleGeometry args={[topRadius, 20]} />
+            <meshStandardMaterial
+              color={COLOR_LAVA}
+              emissive={COLOR_LAVA}
+              emissiveIntensity={2.0}
+              toneMapped={false}
+            />
+          </mesh>
+          {/* White-hot core + yellow halo — reads as pressure from the vent */}
+          <mesh ref={craterCoreRef} position={[0, height + 0.065, 0]}>
+            <sphereGeometry args={[Math.max(0.22, topRadius * 0.34), 18, 18]} />
+            <meshStandardMaterial
+              color={COLOR_ERUPT_CORE}
+              emissive={COLOR_ERUPT_CORE}
+              emissiveIntensity={6.0}
+              toneMapped={false}
+            />
+          </mesh>
+          <mesh ref={eruptMantleRef} position={[0, height + 0.045, 0]} scale={[1, 0.48, 1]}>
+            <sphereGeometry args={[topRadius * 0.88, 16, 16]} />
+            <meshBasicMaterial
+              color={COLOR_ERUPT_HOT}
+              transparent
+              opacity={0.45}
+              depthWrite={false}
+              toneMapped={false}
+              blending={AdditiveBlending}
+            />
+          </mesh>
+          <mesh ref={eruptBloomRef} position={[0, height + 0.14, 0]}>
+            <sphereGeometry args={[topRadius * 1.48, 12, 12]} />
+            <meshBasicMaterial
+              color={COLOR_LAVA_GLOW}
+              transparent
+              opacity={0.26}
+              depthWrite={false}
+              toneMapped={false}
+              blending={AdditiveBlending}
+            />
+          </mesh>
+          {/* Parabolic tube streaks — fountain of glowing arcs from the crater */}
+          {fountainCurves.map((curve, fi) => {
+            const thin = 0.006 + (fi % 6) * 0.0024;
+            const hot = fi % 3 === 0 || fi % 5 === 1;
+            return (
+              <mesh key={fi} castShadow={false}>
+                <tubeGeometry args={[curve, 16, thin, 5, false]} />
+                <meshStandardMaterial
+                  color={hot ? COLOR_ERUPT_HOT : COLOR_LAVA}
+                  emissive={hot ? COLOR_ERUPT_CORE : COLOR_LAVA_CORE}
+                  emissiveIntensity={hot ? 3.4 : 2.35}
+                  roughness={0.26}
+                  metalness={0.18}
+                  toneMapped={false}
+                />
+              </mesh>
+            );
+          })}
+          <VolcanoLavaDrips height={height} baseRadius={baseRadius} topRadius={topRadius} />
+        </>
       )}
     </group>
   );
