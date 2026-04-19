@@ -29,7 +29,7 @@ export const PLAYER_SLOTS: Record<Sport, [PlayerSlot, PlayerSlot]> = {
   // from defender center → contact right at the torso front. Still above
   // AvatarCollisionResolver's 0.70m min separation so they don't shove.
   boxing: [
-    { position: [0, 0.3, -1.15], rotationY: Math.PI },
-    { position: [0, 0.3, -2.15], rotationY: 0 },
+    { position: [0, 0.3, -0.95], rotationY: Math.PI },
+    { position: [0, 0.3, -2.3], rotationY: 0 },
   ],
 };
