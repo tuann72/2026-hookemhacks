@@ -9,12 +9,11 @@ export interface IngestionOptions {
   roomId: string;
   playerId: string;
   stream: MediaStream | null;
-  // Called on each flush interval to drain queued ActionEvents.
-  // Wire to eventTracker.drainEvents() once Phase 1 is implemented.
   drainEvents?: () => ActionEvent[];
+  getChunkRollup?: () => Record<string, number>;
 }
 
-export function useIngestion({ roomId, playerId, stream, drainEvents }: IngestionOptions) {
+export function useIngestion({ roomId, playerId, stream, drainEvents, getChunkRollup }: IngestionOptions) {
   const [matchId, setMatchId] = useState<string | null>(null);
   // Keep matchId in a ref so callbacks always see the latest value without
   // needing to be re-created when the state updates.
@@ -59,8 +58,7 @@ export function useIngestion({ roomId, playerId, stream, drainEvents }: Ingestio
       const id = matchIdRef.current;
       if (!id) return;
 
-      // TODO (Phase 1): replace with eventTracker.rollChunk(chunk.chunkIndex + 1)
-      const rollup = { counts: {} as Record<string, number> };
+      const rollup = { counts: getChunkRollup?.() ?? {} };
 
       const form = new FormData();
       form.append("chunk", chunk.blob, `${chunk.chunkIndex}.webm`);

@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import BodyDetector from "@/components/detection/BodyDetector";
 import { CVRigBridge } from "@/components/detection/CVRigBridge";
+import { IngestionBridge } from "@/components/detection/IngestionBridge";
 import { SELF_PLAYER_ID } from "@/types";
 
 // Full-screen 3D arena — same layout as /world, but mounted inside the
@@ -24,9 +25,13 @@ function CanvasFallback() {
   );
 }
 
-type GameScreenProps = { onEnd?: () => void };
+type GameScreenProps = {
+  onEnd?: () => void;
+  roomId?: string;
+  playerId?: string;
+};
 
-export function GameScreen({ onEnd: _onEnd }: GameScreenProps) {
+export function GameScreen({ onEnd: _onEnd, roomId, playerId }: GameScreenProps) {
   const hideDebug =
     typeof window !== "undefined" && window.location.search.includes("debug=0");
   const debug = !hideDebug;
@@ -34,6 +39,7 @@ export function GameScreen({ onEnd: _onEnd }: GameScreenProps) {
   return (
     <BodyDetector debug={debug}>
       <CVRigBridge playerId={SELF_PLAYER_ID} />
+      {roomId && playerId && <IngestionBridge roomId={roomId} playerId={playerId} />}
       <div className="relative h-screen w-screen overflow-hidden bg-black">
         <GameCanvas debug={false} />
       </div>

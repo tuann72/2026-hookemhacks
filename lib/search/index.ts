@@ -4,10 +4,13 @@ import { gemini, MODELS, EMBED_DIM, normalize } from "@/lib/gemini";
 
 // ─── Plan schemas ─────────────────────────────────────────────────────────────
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const FilterSchema = z.object({
   eventType: z.string().optional(),
   playerId: z.string().optional(),
-  matchId: z.string().optional(),
+  // Reject planner hallucinations like "latest" — only real UUIDs allowed.
+  matchId: z.string().regex(UUID_RE).optional(),
   since: z.string().optional(),
   until: z.string().optional(),
 });
@@ -66,6 +69,12 @@ concept like "amazing", "fast", "powerful", "sloppy".
 Allowed event types: punch, dodge, kick, block.
 Current player id: {playerId}.
 
+Rules:
+- matchId must be a real UUID you were given — NEVER invent values like "latest" or "recent".
+- Omit matchId entirely unless the user gave you a specific match UUID.
+- If no player id is set (empty string), omit playerId from filters entirely.
+- Omit filters you have no concrete value for.
+
 Examples:
 Q: "How many punches have I thrown this session?"
 A: {"kind":"aggregate","metric":"count","target":"match_events","filters":{"eventType":"punch","playerId":"{playerId}","since":"{sessionStart}"}}
@@ -78,6 +87,9 @@ A: {"kind":"hybrid","filters":{"eventType":"punch","minCount":3,"playerId":"{pla
 
 Q: "What was my best round?"
 A: {"kind":"aggregate","metric":"max","target":"match_summaries","filters":{"playerId":"{playerId}"},"orderBy":"metric_desc","limit":1}
+
+Q: "Show me any clip with punches."
+A: {"kind":"retrieve","filters":{"eventType":"punch","minCount":1},"limit":5}
 `;
 
 export async function geminiPlan(

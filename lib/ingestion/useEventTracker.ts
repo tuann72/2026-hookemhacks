@@ -1,58 +1,125 @@
 "use client";
 
-import { useRef, useCallback } from "react";
-import type { ArmState } from "@/types";
+import { useRef, useCallback, useState } from "react";
+import type { PoseLandmark } from "@/types";
+import type { ActionEvent } from "./types";
 
-// Minimum wrist velocity (units/sec normalized by /6) to count as a punch swing.
-const PUNCH_SPEED = 0.3;
-// Elbow must be at least this extended (degrees) — filters out tight guard posture.
-const PUNCH_ELBOW_MIN = 130;
-// Wrist must be at least this high relative to shoulder — rules out low arm drops.
-const PUNCH_HEIGHT_MIN = 0.2;
-// Minimum ms between consecutive punches on the same arm.
-const PUNCH_COOLDOWN_MS = 600;
+// Knuckle span (lm 5→17) must be this many × the calibrated pinky segment
+// (lm 17→18) to count as a punch. Mirrors the punch-test default.
+const PUNCH_SIZE = 3.5;
+// Wrist must return within this normalized-image distance of the calibrated
+// guard position before the next punch on that hand can fire.
+const GUARD_TOLERANCE = 0.1;
+const PUNCH_COOLDOWN_MS = 550;
+
+type Baseline = {
+  pinkySegment: number;
+  wristX: number;
+  wristY: number;
+};
+
+function sampleBaseline(lm: PoseLandmark[] | null): Baseline | null {
+  if (!lm || lm.length < 21) return null;
+  const wrist = lm[0];
+  const pinkyMCP = lm[17];
+  const pinkyPIP = lm[18];
+  const pinkySegment = Math.hypot(pinkyPIP.x - pinkyMCP.x, pinkyPIP.y - pinkyMCP.y);
+  return { pinkySegment, wristX: wrist.x, wristY: wrist.y };
+}
 
 export function useEventTracker() {
-  // Per-side cooldown timestamps
-  const cooldownRef = useRef<{ left: number; right: number }>({ left: 0, right: 0 });
-  // Running totals for the entire session
+  const baselineRef = useRef<{ left: Baseline | null; right: Baseline | null }>({
+    left: null,
+    right: null,
+  });
+  // A punch fires once per extension; rearms when hand returns near guard.
+  const armedRef = useRef<{ left: boolean; right: boolean }>({ left: true, right: true });
+  const lastFireRef = useRef<{ left: number; right: number }>({ left: 0, right: 0 });
+
   const totalRef = useRef<Record<string, number>>({});
-  // Counts since the last rollChunk() call
   const chunkRef = useRef<Record<string, number>>({});
+  const eventQueueRef = useRef<ActionEvent[]>([]);
+  const matchStartRef = useRef<number>(0);
 
-  const detect = useCallback((left: ArmState | null, right: ArmState | null) => {
-    const now = Date.now();
+  const [isCalibrated, setIsCalibrated] = useState(false);
 
-    if (isPunch(left) && now - cooldownRef.current.left > PUNCH_COOLDOWN_MS) {
-      cooldownRef.current.left = now;
-      chunkRef.current.punch = (chunkRef.current.punch ?? 0) + 1;
-      totalRef.current.punch = (totalRef.current.punch ?? 0) + 1;
-    }
+  // Call with current hand landmarks while the user is in guard position.
+  const calibrate = useCallback(
+    (leftHandLm: PoseLandmark[] | null, rightHandLm: PoseLandmark[] | null) => {
+      const l = sampleBaseline(leftHandLm);
+      const r = sampleBaseline(rightHandLm);
+      if (!l && !r) return;
+      baselineRef.current = {
+        left: l ?? baselineRef.current.left,
+        right: r ?? baselineRef.current.right,
+      };
+      armedRef.current = { left: true, right: true };
+      setIsCalibrated(true);
+    },
+    []
+  );
 
-    if (isPunch(right) && now - cooldownRef.current.right > PUNCH_COOLDOWN_MS) {
-      cooldownRef.current.right = now;
-      chunkRef.current.punch = (chunkRef.current.punch ?? 0) + 1;
-      totalRef.current.punch = (totalRef.current.punch ?? 0) + 1;
-    }
-  }, []);
+  const detect = useCallback(
+    (leftHandLm: PoseLandmark[] | null, rightHandLm: PoseLandmark[] | null) => {
+      const now = Date.now();
+      if (matchStartRef.current === 0) matchStartRef.current = now;
 
-  // Call when a new chunk boundary fires. Returns counts for the just-finished chunk.
+      const checkSide = (side: "left" | "right", lm: PoseLandmark[] | null) => {
+        if (!lm || lm.length < 21) return;
+        const base = baselineRef.current[side];
+        if (!base) return;
+
+        const wrist = lm[0];
+        const indexMCP = lm[5];
+        const pinkyMCP = lm[17];
+        const knuckleSpan = Math.hypot(
+          pinkyMCP.x - indexMCP.x,
+          pinkyMCP.y - indexMCP.y
+        );
+
+        const inGuard =
+          Math.hypot(wrist.x - base.wristX, wrist.y - base.wristY) <= GUARD_TOLERANCE;
+
+        if (inGuard) armedRef.current[side] = true;
+
+        const isPunch = knuckleSpan >= PUNCH_SIZE * base.pinkySegment;
+
+        if (
+          isPunch &&
+          armedRef.current[side] &&
+          now - lastFireRef.current[side] >= PUNCH_COOLDOWN_MS
+        ) {
+          armedRef.current[side] = false;
+          lastFireRef.current[side] = now;
+          chunkRef.current.punch = (chunkRef.current.punch ?? 0) + 1;
+          totalRef.current.punch = (totalRef.current.punch ?? 0) + 1;
+          eventQueueRef.current.push({
+            type: "punch",
+            occurredAt: now,
+            matchTimeMs: now - matchStartRef.current,
+          });
+        }
+      };
+
+      checkSide("left", leftHandLm);
+      checkSide("right", rightHandLm);
+    },
+    []
+  );
+
   const rollChunk = useCallback((): Record<string, number> => {
     const counts = { ...chunkRef.current };
     chunkRef.current = {};
     return counts;
   }, []);
 
+  const drainEvents = useCallback((): ActionEvent[] => {
+    const events = eventQueueRef.current;
+    eventQueueRef.current = [];
+    return events;
+  }, []);
+
   const getTotals = useCallback(() => ({ ...totalRef.current }), []);
 
-  return { detect, rollChunk, getTotals };
-}
-
-function isPunch(arm: ArmState | null): boolean {
-  if (!arm) return false;
-  return (
-    arm.swingSpeed > PUNCH_SPEED &&
-    arm.elbowAngle > PUNCH_ELBOW_MIN &&
-    arm.raisedHeight > PUNCH_HEIGHT_MIN
-  );
+  return { detect, calibrate, rollChunk, drainEvents, getTotals, isCalibrated };
 }
