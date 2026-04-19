@@ -189,19 +189,6 @@ export function Lobby({ onStart, playerCount = 4 }: LobbyProps) {
             >
               Join the cove →
             </button>
-
-            <div className="recent-rooms">
-              <h4>Recent rooms</h4>
-              <button type="button" className="recent-chip" onClick={() => setInputCode(["S", "U", "R", "F"])}>
-                🌊 SURF
-              </button>
-              <button type="button" className="recent-chip" onClick={() => setInputCode(["L", "A", "V", "A"])}>
-                🌋 LAVA
-              </button>
-              <button type="button" className="recent-chip" onClick={() => setInputCode(["P", "A", "L", "M"])}>
-                🌴 PALM
-              </button>
-            </div>
           </div>
         )}
       </div>

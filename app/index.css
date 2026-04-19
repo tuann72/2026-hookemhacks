@@ -714,37 +714,6 @@ html, body {
   border-color: var(--sun);
 }
 
-.recent-rooms {
-  margin-top: 22px;
-  padding-top: 18px;
-  border-top: 1.5px dashed var(--card-border);
-}
-.recent-rooms h4 {
-  font-family: var(--font-jetbrains-mono), monospace;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-  color: var(--ink-soft);
-  margin: 0 0 10px;
-}
-.recent-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  margin: 0 6px 6px 0;
-  background: rgba(58,46,76,0.06);
-  border-radius: var(--radius);
-  font-family: var(--font-jetbrains-mono), monospace;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  border: none;
-  color: var(--ink);
-}
-[data-time="night"] .recent-chip { background: rgba(255,224,102,0.1); color: var(--foam); }
-.recent-chip:hover { background: var(--volcano); color: var(--foam); }
-
 /* ====== PAGE 2: CALIBRATION ====== */
 .cal-wrap {
   position: relative;

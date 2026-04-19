@@ -8,6 +8,12 @@ export default function Home() {
   return (
     <div className="app-stage" data-time="day" data-intensity="normal">
       <Backdrop />
+
+      <Link href="/career" className="career-nav-btn" aria-label="View your career">
+        <span className="career-nav-icon" aria-hidden="true">◎</span>
+        <span className="career-nav-label">Career</span>
+      </Link>
+
       <div className="home-wrap">
         <div className="home-hero">
           <div className="home-eyebrow mono">{BRAND.event}</div>
@@ -129,6 +135,50 @@ export default function Home() {
           font-size: 13px;
           font-weight: 400;
           opacity: 0.75;
+        }
+        .career-nav-btn {
+          position: fixed;
+          top: 24px;
+          right: 24px;
+          z-index: 20;
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          padding: 11px 20px 11px 16px;
+          background: var(--card-bg);
+          border: 1.5px solid var(--card-border);
+          border-radius: 999px;
+          box-shadow: var(--shadow-chunky);
+          color: var(--ink);
+          font-family: var(--font-outfit), system-ui, sans-serif;
+          font-weight: 600;
+          font-size: 14px;
+          letter-spacing: 0.02em;
+          text-decoration: none;
+          cursor: pointer;
+          backdrop-filter: blur(6px);
+          transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+        }
+        .career-nav-btn:hover {
+          transform: translateY(-2px);
+          border-color: var(--sun);
+          box-shadow: 0 14px 28px rgba(58, 46, 76, 0.18);
+        }
+        .career-nav-btn:active {
+          transform: translateY(0);
+        }
+        .career-nav-icon {
+          font-size: 18px;
+          color: var(--sun);
+          line-height: 1;
+        }
+        @media (max-width: 520px) {
+          .career-nav-btn {
+            top: 16px;
+            right: 16px;
+            padding: 9px 16px 9px 14px;
+            font-size: 13px;
+          }
         }
         .home-badge {
           font-size: 11px;

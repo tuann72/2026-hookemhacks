@@ -8,12 +8,6 @@ import { BRAND } from "@/components/shared/constants";
 import { joinRoom as joinRoomService } from "@/lib/multiplayer/roomService";
 import { useIdentity } from "@/hooks/useIdentity";
 
-const RECENT = [
-  { emoji: "🌊", code: "SURF" },
-  { emoji: "🌋", code: "LAVA" },
-  { emoji: "🌴", code: "PALM" },
-];
-
 export default function JoinPage() {
   return (
     <Suspense>
@@ -64,8 +58,6 @@ function JoinForm() {
     inputRefs.current[focusIdx]?.focus();
   };
 
-  const setQuickCode = (code: string) => setInputCode(code.split(""));
-
   const filled = inputCode.every((c) => c);
   const codeStr = inputCode.join("");
 
@@ -108,15 +100,6 @@ function JoinForm() {
                 onPaste={handlePaste}
                 autoFocus={i === 0}
               />
-            ))}
-          </div>
-
-          <div className="recent-rooms" style={{ marginTop: 12 }}>
-            <h4>Recent rooms</h4>
-            {RECENT.map((r) => (
-              <button key={r.code} type="button" className="recent-chip" onClick={() => setQuickCode(r.code)}>
-                {r.emoji} {r.code}
-              </button>
             ))}
           </div>
 
