@@ -24,6 +24,8 @@ import type { PoseLandmark } from "@/types";
  */
 export function usePunchDetector(opts: {
   onPunch?: (side: "left" | "right") => void;
+  /** Fired when a previously-fired hand drops back below thresholds. */
+  onRelease?: (side: "left" | "right") => void;
 } = {}): {
   onCalibrate: () => void;
   onResetCounts: () => void;
@@ -56,11 +58,15 @@ export function usePunchDetector(opts: {
   // Per-hand cooldown timestamp.
   const lastFire = useRef<{ left: number; right: number }>({ left: 0, right: 0 });
 
-  // Ref-stable onPunch so the detection effect's dep array doesn't churn.
+  // Ref-stable callbacks so the detection effect's dep array doesn't churn.
   const onPunchRef = useRef(opts.onPunch);
+  const onReleaseRef = useRef(opts.onRelease);
   useEffect(() => {
     onPunchRef.current = opts.onPunch;
   }, [opts.onPunch]);
+  useEffect(() => {
+    onReleaseRef.current = opts.onRelease;
+  }, [opts.onRelease]);
 
   useEffect(() => {
     latestHandsRef.current = {
@@ -228,7 +234,12 @@ export function usePunchDetector(opts: {
         onPunchRef.current?.("left");
       }
     } else {
-      armed.current.left = true;
+      // Transition from un-armed (still in a fired punch) → armed is the
+      // release signal: the user's fist dropped back below thresholds.
+      if (!armed.current.left) {
+        armed.current.left = true;
+        onReleaseRef.current?.("left");
+      }
     }
 
     if (fires(rm)) {
@@ -242,7 +253,10 @@ export function usePunchDetector(opts: {
         onPunchRef.current?.("right");
       }
     } else {
-      armed.current.right = true;
+      if (!armed.current.right) {
+        armed.current.right = true;
+        onReleaseRef.current?.("right");
+      }
     }
 
     mutate.setLeftMetrics(lm);

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { usePoseStore } from "@/lib/store/poseStore";
+import { usePunchCalibrationStore } from "@/lib/store/punchCalibrationStore";
 import type { PlayerId } from "@/types";
 import type { PoseSnapshot } from "@/lib/multiplayer/types";
 
@@ -51,7 +52,14 @@ export function usePoseSync({ selfId, broadcast, enabled = true }: UsePoseSyncOp
       if (sendCount.current === 1 || sendCount.current % 24 === 0) {
         console.log("[pose-sync] broadcast #", sendCount.current, "bones=", Object.keys(rig.pose).length);
       }
-      broadcast({ rig });
+      const cal = usePunchCalibrationStore.getState();
+      broadcast({
+        rig,
+        inGuard: {
+          left: cal.leftMetrics.inGuard,
+          right: cal.rightMetrics.inGuard,
+        },
+      });
     });
 
     return unsub;

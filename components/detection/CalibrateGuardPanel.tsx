@@ -1,6 +1,7 @@
 "use client";
 
 import { usePunchCalibrationStore } from "@/lib/store/punchCalibrationStore";
+import { useGameStore } from "@/lib/store/gameStore";
 import {
   type HandMetrics,
   type Params,
@@ -176,6 +177,16 @@ export function CalibrateGuardPanel({
           className="flex-1 rounded-md border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-zinc-300 hover:bg-zinc-800"
         >
           Reset
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const store = useGameStore.getState();
+            for (const p of store.players) store.setPlayerHp(p.id, p.maxHp);
+          }}
+          className="flex-1 rounded-md border border-rose-500/60 bg-rose-500/10 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-rose-200 hover:bg-rose-500/20"
+        >
+          Reset HP
         </button>
       </div>
 

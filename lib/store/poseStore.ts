@@ -11,12 +11,18 @@ import { SELF_PLAYER_ID, REMOTE_PLAYER_ID } from "@/types";
 /**
  * Transient punch-animation state. Written by the punch detector when a jab/
  * cross fires; read by Avatar.useFrame to override the CV rig on the punching
- * arm for a short window. `null` means CV drives the arms normally.
+ * arm. `null` means CV drives the arms normally.
+ *
+ * The animation is driven in two halves:
+ *   1. EXTEND: startedAt → startedAt + EXTEND_MS — arm straightens toward
+ *      target; once extension hits 1 it HOLDS there.
+ *   2. RECOVER: begins when the detector sees the fist drop back to guard
+ *      and stamps `releasedAt`. Lasts RECOVER_MS, then Avatar clears.
  */
 export interface PunchAnim {
   side: "left" | "right";
   startedAt: number; // performance.now()
-  durationMs: number;
+  releasedAt: number | null;
 }
 
 export interface PlayerPose {
@@ -44,8 +50,8 @@ interface PoseStore {
   setPunchAnim: (
     playerId: PlayerId,
     side: "left" | "right",
-    durationMs: number,
   ) => void;
+  markPunchReleased: (playerId: PlayerId, side: "left" | "right") => void;
   clearPunchAnim: (playerId: PlayerId) => void;
   clearPlayer: (playerId: PlayerId) => void;
   reset: () => void;
@@ -79,16 +85,39 @@ export const usePoseStore = create<PoseStore>((set) => ({
         },
       },
     })),
-  setPunchAnim: (playerId, side, durationMs) =>
+  setPunchAnim: (playerId, side) =>
     set((s) => ({
       players: {
         ...s.players,
         [playerId]: {
           ...(s.players[playerId] ?? emptyPose()),
-          punchAnim: { side, startedAt: performance.now(), durationMs },
+          punchAnim: {
+            side,
+            startedAt: performance.now(),
+            releasedAt: null,
+          },
         },
       },
     })),
+  markPunchReleased: (playerId, side) =>
+    set((s) => {
+      const prev = s.players[playerId];
+      if (!prev?.punchAnim) return s;
+      if (prev.punchAnim.side !== side) return s;
+      if (prev.punchAnim.releasedAt !== null) return s;
+      return {
+        players: {
+          ...s.players,
+          [playerId]: {
+            ...prev,
+            punchAnim: {
+              ...prev.punchAnim,
+              releasedAt: performance.now(),
+            },
+          },
+        },
+      };
+    }),
   clearPunchAnim: (playerId) =>
     set((s) => ({
       players: {

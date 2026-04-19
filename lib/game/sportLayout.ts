@@ -21,12 +21,12 @@ export const PLAYER_SLOTS: Record<Sport, [PlayerSlot, PlayerSlot]> = {
     { position: [-0.7, 0, 1.8], rotationY: 0 },
     { position: [0.8, 0, 1.8], rotationY: 0 },
   ],
-  // Boxing: red corner vs blue corner, facing each other across the canvas.
-  // Platform top y=0.3; ring center z=-1.6. Fighters stand 0.6 units either
-  // side of ring center so a straight jab connects — tighter than the red
-  // circle edges.
+  // Boxing: red corner vs blue corner. Symmetric around the ring center
+  // (z=-1.6) with both fighters placed just outside the red center-logo
+  // circle (outer radius 1.0 → circle edges at z=-0.6 and z=-2.6). 2.2 m
+  // gap → covered by the 1.6×-scaled 1.92 m reach + HIT_RADIUS.
   boxing: [
-    { position: [0, 0.3, -1.0], rotationY: Math.PI },
-    { position: [0, 0.3, -2.2], rotationY: 0 },
+    { position: [0, 0.3, -0.3], rotationY: Math.PI },
+    { position: [0, 0.3, -2.9], rotationY: 0 },
   ],
 };

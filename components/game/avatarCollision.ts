@@ -2,14 +2,21 @@
 
 import { useFrame } from "@react-three/fiber";
 import type { Group } from "three";
+import type { AvatarBones } from "@/lib/rigging";
 import type { PlayerId } from "@/types";
 
 // Radius of the cylindrical "body" used for avatar-vs-avatar separation.
 // Covers the torso with a small buffer; arm swings are intentionally not
-// included so punches don't push the opponent just by arm overlap.
-export const AVATAR_RADIUS = 0.35;
+// included so punches don't push the opponent just by arm overlap. Scales
+// with the avatar-root uniform scale in Avatar.tsx (kept inline here to avoid
+// a circular import).
+export const AVATAR_RADIUS = 0.35 * 1.6;
 
 const registry = new Map<PlayerId, Group>();
+// Bone-ref registry. Store the live `bones.current` object (not a snapshot)
+// so downstream systems reading world positions always see the latest
+// Three.js Group for each humanoid bone.
+const boneRegistry = new Map<PlayerId, AvatarBones>();
 
 /**
  * Register/unregister an avatar's root group for collision. Pass `null` on
@@ -23,6 +30,27 @@ export function registerAvatarBody(id: PlayerId, group: Group | null): void {
 
 export function getAvatarBody(id: PlayerId): Group | undefined {
   return registry.get(id);
+}
+
+/**
+ * Register/unregister an avatar's bone-refs map. Pass `null` on unmount.
+ * Consumers (e.g. the punch collision detector) can then look up any bone's
+ * world position without drilling through React props.
+ */
+export function registerAvatarBones(
+  id: PlayerId,
+  bones: AvatarBones | null,
+): void {
+  if (bones) boneRegistry.set(id, bones);
+  else boneRegistry.delete(id);
+}
+
+export function getAvatarBones(id: PlayerId): AvatarBones | undefined {
+  return boneRegistry.get(id);
+}
+
+export function registeredPlayerIds(): PlayerId[] {
+  return Array.from(boneRegistry.keys());
 }
 
 /**

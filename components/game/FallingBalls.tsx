@@ -4,15 +4,17 @@ import { useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import type { Mesh } from "three";
 import { getAvatarBody } from "./avatarCollision";
+import { AVATAR_SCALE } from "./Avatar";
 import { useBallsStore, type FallingBall } from "@/lib/store/ballsStore";
-import { useGameStore } from "@/lib/store/gameStore";
+import { applyDamage } from "@/lib/combat/damage";
 
 // Snappier-than-real gravity so the drop feels game-y, not sluggish.
 const GRAVITY = -14;
 const BALL_RADIUS = 0.18;
 // Approximate head-crown height above the avatar root. Matches Avatar.tsx:
-// HIPS_Y(1.0) + SPINE(0.2) + CHEST(0.25) + NECK(0.1) + HEAD(0.22) + HEAD_R.
-const HEAD_TOP_OFFSET = 1.95;
+// HIPS_Y(1.0) + SPINE(0.2) + CHEST(0.25) + NECK(0.1) + HEAD(0.22) + HEAD_R,
+// scaled by the avatar root's uniform scale.
+const HEAD_TOP_OFFSET = 1.95 * AVATAR_SCALE;
 
 function Ball({ ball }: { ball: FallingBall }) {
   const ref = useRef<Mesh>(null);
@@ -51,7 +53,7 @@ function Ball({ ball }: { ball: FallingBall }) {
       // Hit = ball reached head height and is still within a loose XZ radius.
       if (mesh.position.y <= headTop && xzDist < BALL_RADIUS + 0.35) {
         landed.current = true;
-        useGameStore.getState().damagePlayer(ball.targetPlayerId, ball.damage);
+        applyDamage(ball.targetPlayerId, ball.damage);
         useBallsStore.getState().remove(ball.id);
         return;
       }

@@ -5,8 +5,9 @@ import { Environment, Html, OrbitControls, Stats } from "@react-three/drei";
 import { Suspense } from "react";
 import { AvatarCollisionResolver } from "./avatarCollision";
 import { FallingBalls } from "./FallingBalls";
+import { PunchCollisionDetector } from "./PunchCollisionDetector";
 import { World } from "./World";
-import { Avatar, type AvatarComponent } from "./Avatar";
+import { Avatar, AVATAR_SCALE, type AvatarComponent } from "./Avatar";
 import { RedBoxer } from "./RedBoxer";
 import { BlueBoxer } from "./BlueBoxer";
 import { useGameStore } from "@/lib/store/gameStore";
@@ -62,12 +63,13 @@ export function GameCanvas({ debug = false, AvatarComponent = Avatar }: GameCanv
             BoxerComponent = isRed ? RedBoxer : BlueBoxer;
           }
           // Opponent aim point — the other slot's origin plus shoulder
-          // height (HIPS_Y + SPINE_LEN + CHEST_LEN*0.85 ≈ 1.51). Aiming at
-          // the opponent's SHOULDER (not head) keeps the punch horizontal
-          // along the −Z axis instead of tilting upward toward the head.
+          // height (HIPS_Y + SPINE_LEN + CHEST_LEN*0.85 ≈ 1.51) scaled by
+          // AVATAR_SCALE since the whole rig is scaled at the root. Aiming
+          // at the shoulder (not head) keeps the punch horizontal along
+          // the −Z axis instead of tilting upward.
           const opp = slots[1 - i];
           const opponentHeadPos: [number, number, number] | undefined = opp
-            ? [opp.position[0], opp.position[1] + 1.51, opp.position[2]]
+            ? [opp.position[0], opp.position[1] + 1.51 * AVATAR_SCALE, opp.position[2]]
             : undefined;
           return (
             <BoxerComponent
@@ -81,6 +83,7 @@ export function GameCanvas({ debug = false, AvatarComponent = Avatar }: GameCanv
         })}
         {/* Lightweight XY separation — pushes overlapping avatars apart. */}
         <AvatarCollisionResolver />
+        <PunchCollisionDetector />
         <FallingBalls />
         <Environment preset="sunset" />
       </Suspense>
