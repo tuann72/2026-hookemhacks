@@ -83,10 +83,8 @@ export default function LobbyPage() {
 
   // True once everyone has thumbs-upped. Fall back to localReady for self so
   // we don't wait on the round-trip of our own presence broadcast.
-  // TEMP: solo-test mode — `players.length >= 1` lets a single player progress.
-  // Restore `players.length >= 2 &&` before shipping.
   const allReady =
-    players.length >= 1 &&
+    players.length >= 2 &&
     players.every((p) => (p.playerId === playerId ? localReady || p.ready : p.ready));
 
   const copyCode = async () => {
