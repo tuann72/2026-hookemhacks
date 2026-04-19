@@ -259,8 +259,11 @@ export function usePunchDetector(opts: {
       nowMs - guardHeldSinceRef.current >= MIN_GUARD_MS;
 
     // Uppercut charge state machine.
+    // guardReady gates starting the charge — once it begins, the fists moving
+    // out of guard to rotate forward won't cancel it.
     const bothFacing = lm.knucklesFacing && rm.knucklesFacing;
-    if (bothFacing && !isUppercutModeRef.current && guardReady) {
+    const chargingAlready = uppercutChargeStartRef.current !== null;
+    if (bothFacing && !isUppercutModeRef.current && (guardReady || chargingAlready)) {
       if (uppercutChargeStartRef.current === null) uppercutChargeStartRef.current = nowMs;
       const elapsed = nowMs - uppercutChargeStartRef.current;
       const progress = Math.min(1, elapsed / UPPERCUT_CHARGE_MS);
@@ -278,13 +281,18 @@ export function usePunchDetector(opts: {
 
     const inUppercut = isUppercutModeRef.current;
 
-    if (fires(lm, inUppercut)) {
+    // In uppercut mode, block until the user leaves the charge rotation —
+    // knucklesFacing true means fists are still wound up, not thrown yet.
+    if (fires(lm, inUppercut) && !(inUppercut && lm.knucklesFacing)) {
       if (armed.current.left && nowMs - lastFire.current.left >= active.cooldown) {
         mutate.setLeftCount((c) => c + 1);
         if (inUppercut) {
           mutate.setUppercutCount((c) => c + 1);
           isUppercutModeRef.current = false;
           mutate.setIsUppercutMode(false);
+          uppercutChargeStartRef.current = null;
+          guardHeldSinceRef.current = null;
+          mutate.setChargeProgress(0);
         }
         armed.current.left = false;
         lastFire.current.left = nowMs;
@@ -299,13 +307,16 @@ export function usePunchDetector(opts: {
       }
     }
 
-    if (fires(rm, inUppercut)) {
+    if (fires(rm, inUppercut) && !(inUppercut && rm.knucklesFacing)) {
       if (armed.current.right && nowMs - lastFire.current.right >= active.cooldown) {
         mutate.setRightCount((c) => c + 1);
         if (inUppercut) {
           mutate.setUppercutCount((c) => c + 1);
           isUppercutModeRef.current = false;
           mutate.setIsUppercutMode(false);
+          uppercutChargeStartRef.current = null;
+          guardHeldSinceRef.current = null;
+          mutate.setChargeProgress(0);
         }
         armed.current.right = false;
         lastFire.current.right = nowMs;

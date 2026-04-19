@@ -18,6 +18,12 @@ export const MAX_HP = 200;
 /** Damage applied on a counted punch hit, before guard mitigation. */
 export const PUNCH_DAMAGE_BASE = 10;
 
+/** Damage applied on a charged uppercut hit, before guard mitigation. */
+export const UPPERCUT_DAMAGE_BASE = 35;
+
+/** How long (ms) the fist holds at peak extension before retracting on an uppercut. */
+export const UPPERCUT_HOLD_MS = 180;
+
 // ─── Mitigation ──────────────────────────────────────────────────────────────
 
 /** Multiplier applied to damage when the target is in guard (0..1). 0.5 = 50% mitigation. */

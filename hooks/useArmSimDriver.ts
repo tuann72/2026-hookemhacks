@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useArmSimStore } from "@/lib/store/armSimStore";
 import { usePunchCalibrationStore } from "@/lib/store/punchCalibrationStore";
-import { applyDamage, PUNCH_DAMAGE_BASE } from "@/lib/combat";
+import { usePoseStore } from "@/lib/store/poseStore";
+import { applyDamage, PUNCH_DAMAGE_BASE, UPPERCUT_DAMAGE_BASE, EXTEND_MS, UPPERCUT_HOLD_MS } from "@/lib/combat";
 import { broadcastHit } from "@/lib/multiplayer/hitBroadcaster";
 import type { PlayerId } from "@/types";
 
@@ -27,7 +28,7 @@ export interface UseArmSimDriverOptions {
 }
 
 export interface UseArmSimDriverResult {
-  onPunch: (side: "left" | "right") => void;
+  onPunch: (side: "left" | "right", isUppercut?: boolean) => void;
   onRelease: (side: "left" | "right") => void;
 }
 
@@ -63,7 +64,22 @@ export function useArmSimDriver({
   );
 
   const onPunch = useCallback(
-    (side: "left" | "right") => {
+    (side: "left" | "right", isUppercut?: boolean) => {
+      const avatarSide = side === "left" ? "right" : "left";
+      if (isUppercut) {
+        // Uppercut uses the dedicated punchAnim path (rising arc animation)
+        // rather than armSim so it doesn't conflict with the guard/punch blend.
+        const { setPunchAnim, markPunchReleased } = usePoseStore.getState();
+        setPunchAnim(playerId, avatarSide, "uppercut");
+        setTimeout(() => {
+          markPunchReleased(playerId, avatarSide);
+        }, EXTEND_MS + UPPERCUT_HOLD_MS);
+        const { amount } = applyDamage(opponentId, UPPERCUT_DAMAGE_BASE);
+        if (broadcastOnHit) {
+          broadcastHit({ attackerId: playerId, targetId: opponentId, damage: amount });
+        }
+        return;
+      }
       punchingRef.current[side] = true;
       refreshArm(side);
       const { amount } = applyDamage(opponentId, PUNCH_DAMAGE_BASE);

@@ -371,6 +371,20 @@ export function CalibrateGuardPanel({
               <div className="font-mono text-xl tabular-nums text-yellow-200">{uppercutCount}</div>
             </div>
           </div>
+          {chargeProgress > 0 && !isUppercutMode && (
+            <div className="mt-2">
+              <div className="mb-1 flex justify-between font-mono text-[9px] uppercase tracking-widest text-yellow-400">
+                <span>Charging…</span>
+                <span>{Math.round(chargeProgress * 100)}%</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+                <div
+                  className="h-full rounded-full bg-yellow-400 transition-all"
+                  style={{ width: `${chargeProgress * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
           {isUppercutMode && (
             <div className="mt-2 animate-pulse rounded-lg border border-yellow-400/60 bg-yellow-400/10 px-3 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-yellow-300">
               ⚡ Uppercut Mode

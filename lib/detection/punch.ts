@@ -67,9 +67,9 @@ export const EMPTY_METRICS: HandMetrics = {
 
 // Uppercut: hold guard for MIN_GUARD_MS, then rotate both fists knuckles-forward
 // for UPPERCUT_CHARGE_MS to activate the mode (lowers size threshold by UPPERCUT_SIZE_FACTOR).
-export const UPPERCUT_ROTATION_THRESH = Math.PI * 0.45; // ~81°
+export const UPPERCUT_ROTATION_THRESH = Math.PI * 0.25; // ~45° — broad enough for natural knuckles-forward rotation
 export const UPPERCUT_CHARGE_MS = 1000;
-export const MIN_GUARD_MS = 500;
+export const MIN_GUARD_MS = 800; // both hands must be in guard this long before charge unlocks
 export const UPPERCUT_SIZE_FACTOR = 0.6;
 
 export const DEFAULTS: Params = {

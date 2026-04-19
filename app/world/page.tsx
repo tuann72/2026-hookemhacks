@@ -10,6 +10,7 @@ import { CVRigBridge } from "@/components/detection/CVRigBridge";
 import { HPBars } from "@/components/game/HPBars";
 import { CalibrateGuardPanel } from "@/components/detection/CalibrateGuardPanel";
 import { GuardVignette } from "@/components/detection/GuardVignette";
+import { UppercutChargeIndicator } from "@/components/detection/UppercutChargeIndicator";
 import { usePunchDetector } from "@/hooks/usePunchDetector";
 import { useArmSimDriver } from "@/hooks/useArmSimDriver";
 import { useCameraStore } from "@/lib/store/cameraStore";
@@ -48,6 +49,7 @@ export default function WorldPage() {
         <GameCanvas debug={debugPanel} />
         <HPBars />
         <GuardVignette />
+        <UppercutChargeIndicator />
         <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">
           world · CV driven{debug ? " · feed bottom-right" : ""}
         </div>
