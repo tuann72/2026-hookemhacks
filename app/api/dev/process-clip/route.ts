@@ -2,8 +2,7 @@
 // Triggers the embedder pipeline for a given clipId so you can test without
 // setting up a real Supabase webhook.
 import { createClient } from "@supabase/supabase-js";
-import { captionClip } from "@/lib/generation";
-import { embedText } from "@/lib/embeddings";
+import { gemini, MODELS, EMBED_DIM, normalize } from "@/lib/gemini";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -26,7 +25,7 @@ export async function POST(req: Request) {
     .update({ embedding_status: "processing" })
     .eq("id", clipId)
     .eq("embedding_status", "pending")
-    .select("id, storage_path")
+    .select("id, storage_path, event_counts")
     .single();
 
   if (!claimed) {
@@ -40,22 +39,41 @@ export async function POST(req: Request) {
 
     if (error || !blob) throw new Error(`storage download failed: ${error?.message}`);
 
-    const videoBytes = new Uint8Array(await blob.arrayBuffer());
-    const caption = await captionClip(videoBytes);
-    const embedding = await embedText(caption);
+    const buffer = Buffer.from(await blob.arrayBuffer());
+
+    const result = await gemini.models.embedContent({
+      model: MODELS.embed,
+      contents: [
+        {
+          parts: [
+            {
+              inlineData: {
+                mimeType: "video/webm",
+                data: buffer.toString("base64"),
+              },
+            },
+          ],
+        },
+      ],
+      config: {
+        outputDimensionality: EMBED_DIM,
+        taskType: "RETRIEVAL_DOCUMENT",
+      },
+    });
+
+    const embedding = result.embeddings?.[0]?.values;
+    if (!embedding || embedding.length !== EMBED_DIM) {
+      throw new Error(`unexpected embedding shape: ${embedding?.length}`);
+    }
 
     await supabase
       .from("clips")
-      .update({ caption, embedding, embedding_status: "ready" })
+      .update({ embedding: normalize(embedding), embedding_status: "ready" })
       .eq("id", claimed.id);
 
-    return Response.json({ ok: true, clipId, caption });
+    return Response.json({ ok: true, clipId });
   } catch (err) {
-    await supabase
-      .from("clips")
-      .update({ embedding_status: "failed" })
-      .eq("id", claimed.id);
-
+    await supabase.from("clips").update({ embedding_status: "failed" }).eq("id", claimed.id);
     const msg = err instanceof Error ? err.message : String(err);
     return Response.json({ ok: false, error: msg }, { status: 500 });
   }

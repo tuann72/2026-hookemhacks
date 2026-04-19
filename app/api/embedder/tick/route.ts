@@ -1,7 +1,6 @@
 import { after } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { captionClip } from "@/lib/generation";
-import { embedText } from "@/lib/embeddings";
+import { gemini, MODELS, EMBED_DIM, normalize } from "@/lib/gemini";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -22,20 +21,17 @@ export async function POST(req: Request) {
   const clipId = body.record?.id as string | undefined;
   if (!clipId) return new Response("no id", { status: 400 });
 
-  // Claim the row atomically before responding — if claim fails (already
-  // processing or done) we bail early without doing any Gemini work.
   const supabase = serviceClient();
   const { data: claimed } = await supabase
     .from("clips")
     .update({ embedding_status: "processing" })
     .eq("id", clipId)
     .eq("embedding_status", "pending")
-    .select("id, storage_path")
+    .select("id, storage_path, event_counts")
     .single();
 
   if (!claimed) return Response.json({ ok: true, skipped: true });
 
-  // after() keeps the function alive for slow work after the 200 is sent.
   after(processClip(supabase, claimed).catch((err) =>
     console.error("[embedder] failed", clipId, err)
   ));
@@ -45,34 +41,57 @@ export async function POST(req: Request) {
 
 async function processClip(
   supabase: ReturnType<typeof serviceClient>,
-  claimed: { id: string; storage_path: string }
+  claimed: { id: string; storage_path: string; event_counts: Record<string, number> | null }
 ) {
+  // Skip clips with no detected events — nothing to search for.
+  const totalEvents = Object.values(claimed.event_counts ?? {})
+    .reduce((a, b) => a + (Number(b) || 0), 0);
+
+  if (totalEvents === 0) {
+    await supabase.from("clips").update({ embedding_status: "skipped" }).eq("id", claimed.id);
+    return;
+  }
+
   try {
-    // 1. Download the WebM clip from storage.
     const { data: blob, error } = await supabase.storage
       .from("clips")
       .download(claimed.storage_path);
 
     if (error || !blob) throw new Error(`storage download failed: ${error?.message}`);
 
-    const videoBytes = new Uint8Array(await blob.arrayBuffer());
+    const buffer = Buffer.from(await blob.arrayBuffer());
 
-    // 2. Caption with Gemini 2.5 flash.
-    const caption = await captionClip(videoBytes);
+    const result = await gemini.models.embedContent({
+      model: MODELS.embed,
+      contents: [
+        {
+          parts: [
+            {
+              inlineData: {
+                mimeType: "video/webm",
+                data: buffer.toString("base64"),
+              },
+            },
+          ],
+        },
+      ],
+      config: {
+        outputDimensionality: EMBED_DIM,
+        taskType: "RETRIEVAL_DOCUMENT",
+      },
+    });
 
-    // 3. Embed the caption with text-embedding-004.
-    const embedding = await embedText(caption);
+    const embedding = result.embeddings?.[0]?.values;
+    if (!embedding || embedding.length !== EMBED_DIM) {
+      throw new Error(`unexpected embedding shape: ${embedding?.length}`);
+    }
 
-    // 4. Write results back.
     await supabase
       .from("clips")
-      .update({ caption, embedding, embedding_status: "ready" })
+      .update({ embedding: normalize(embedding), embedding_status: "ready" })
       .eq("id", claimed.id);
   } catch (err) {
-    await supabase
-      .from("clips")
-      .update({ embedding_status: "failed" })
-      .eq("id", claimed.id);
+    await supabase.from("clips").update({ embedding_status: "failed" }).eq("id", claimed.id);
     throw err;
   }
 }

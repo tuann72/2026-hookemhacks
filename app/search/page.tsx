@@ -5,9 +5,9 @@ import { useIdentity } from "@/hooks/useIdentity";
 
 type ClipResult = {
   id: string;
-  caption: string;
+  caption?: string | null;
   event_counts: Record<string, number>;
-  started_at: string;
+  started_at?: string | null;
   videoUrl: string | null;
   distance?: number;
 };
@@ -423,6 +423,7 @@ export default function SearchPage() {
         .btn.ghost { background: var(--card-bg); border: 1.5px solid var(--card-border); color: var(--ink); }
         .btn-sm { padding: 7px 14px; font-size: 13px; }
         .mono { font-family: var(--font-jetbrains-mono), monospace; }
+        .caption-btn { font-size: 11px; padding: 5px 12px; align-self: flex-start; }
       `}</style>
     </div>
   );
@@ -476,9 +477,20 @@ function ClipsView({ clips }: { clips: ClipResult[] }) {
 
 function ClipCard({ clip }: { clip: ClipResult }) {
   const counts = Object.entries(clip.event_counts ?? {}).filter(([, v]) => v > 0);
-  const time = clip.started_at
-    ? new Date(clip.started_at).toLocaleString()
-    : null;
+  const time = clip.started_at ? new Date(clip.started_at).toLocaleString() : null;
+  const [caption, setCaption] = useState<string | null>(clip.caption ?? null);
+  const [captionLoading, setCaptionLoading] = useState(false);
+
+  const fetchCaption = async () => {
+    setCaptionLoading(true);
+    try {
+      const res = await fetch(`/api/clips/${clip.id}/caption`, { method: "POST" });
+      const json = await res.json();
+      if (json.caption) setCaption(json.caption);
+    } finally {
+      setCaptionLoading(false);
+    }
+  };
 
   return (
     <div className="clip-card">
@@ -501,7 +513,18 @@ function ClipCard({ clip }: { clip: ClipResult }) {
         )}
       </div>
       <div className="clip-body">
-        {clip.caption && <p className="clip-caption">{clip.caption}</p>}
+        {caption ? (
+          <p className="clip-caption">{caption}</p>
+        ) : (
+          <button
+            type="button"
+            className="btn ghost btn-sm caption-btn"
+            onClick={fetchCaption}
+            disabled={captionLoading}
+          >
+            {captionLoading ? "Generating…" : "Explain this clip"}
+          </button>
+        )}
         {counts.length > 0 && (
           <div className="clip-counts">
             {counts.map(([k, v]) => (

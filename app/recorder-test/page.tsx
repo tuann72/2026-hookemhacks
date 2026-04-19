@@ -6,11 +6,12 @@
 // back inline to verify standalone-playability (including chunks 1+).
 // Delete this route once the recorder is wired into the real game flow.
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import BodyDetector from "@/components/detection/BodyDetector";
 import { useBodyDetection } from "@/hooks/useBodyDetection";
 import { useRecorder } from "@/lib/recorder";
 import type { ChunkReady } from "@/lib/recorder";
+import { useEventTracker } from "@/lib/ingestion/useEventTracker";
 import Link from "next/link";
 
 type ChunkStatus = "idle" | "uploading" | "embedding" | "ready" | "error";

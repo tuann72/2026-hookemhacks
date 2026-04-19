@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from "@supabase/supabase-js";
-import { embedText } from "@/lib/embeddings";
+import { gemini, MODELS, EMBED_DIM, normalize } from "@/lib/gemini";
 
 // ─── Plan schemas ─────────────────────────────────────────────────────────────
 
@@ -54,8 +53,6 @@ export type HybridPlan = z.infer<typeof HybridPlanSchema>;
 
 // ─── Planner ──────────────────────────────────────────────────────────────────
 
-const genai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-
 const SYSTEM = `
 You convert a player's natural-language question into a structured query plan for a
 gameplay search system. Output ONLY a JSON object matching one of three shapes:
@@ -91,14 +88,32 @@ export async function geminiPlan(
     .replace(/{playerId}/g, ctx.playerId ?? "")
     .replace(/{sessionStart}/g, ctx.sessionStart ?? new Date(0).toISOString());
 
-  const model = genai.getGenerativeModel({
-    model: "gemini-2.5-flash",
-    systemInstruction: system,
-    generationConfig: { responseMimeType: "application/json" },
+  const result = await gemini.models.generateContent({
+    model: MODELS.plan,
+    contents: [{ role: "user", parts: [{ text: question }] }],
+    config: {
+      systemInstruction: system,
+      responseMimeType: "application/json",
+    },
   });
 
-  const result = await model.generateContent(question);
-  return JSON.parse(result.response.text());
+  return JSON.parse(result.text ?? "{}");
+}
+
+// ─── Query embedding ──────────────────────────────────────────────────────────
+
+async function embedQuery(text: string): Promise<number[]> {
+  const result = await gemini.models.embedContent({
+    model: MODELS.embed,
+    contents: [{ parts: [{ text }] }],
+    config: {
+      outputDimensionality: EMBED_DIM,
+      taskType: "RETRIEVAL_QUERY",
+    },
+  });
+  const values = result.embeddings?.[0]?.values;
+  if (!values) throw new Error("no query embedding returned");
+  return normalize(values);
 }
 
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
@@ -164,7 +179,7 @@ async function runRetrieve(supabase: ReturnType<typeof serviceClient>, p: Retrie
 }
 
 async function runHybrid(supabase: ReturnType<typeof serviceClient>, p: HybridPlan) {
-  const queryVec = await embedText(p.semanticQuery);
+  const queryVec = await embedQuery(p.semanticQuery);
 
   const { data, error } = await supabase.rpc("search_clips_hybrid", {
     p_player_id: p.filters.playerId ?? null,
