@@ -350,11 +350,31 @@ function RecorderTestPanel() {
                 style={{ width: "100%", borderRadius: 6, background: "#000", maxHeight: 180 }}
               />
 
-              {clipId && (
-                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)" }}>
-                  clip id: {clipId}
-                </div>
-              )}
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button
+                  type="button"
+                  onClick={() => downloadBlob(chunk.blob, `clip-${chunk.chunkIndex}-${counts.punch ?? 0}punches.webm`)}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 4,
+                    border: "1px solid rgba(124,197,255,0.3)",
+                    background: "rgba(124,197,255,0.08)",
+                    color: "#7cc5ff",
+                    fontSize: 10,
+                    fontFamily: "monospace",
+                    fontWeight: 700,
+                    letterSpacing: "0.05em",
+                    cursor: "pointer",
+                  }}
+                >
+                  Save fixture
+                </button>
+                {clipId && (
+                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)" }}>
+                    clip id: {clipId}
+                  </span>
+                )}
+              </div>
 
               {status === "error" && (
                 <div style={{ fontSize: 11, color: "#ff3d1f" }}>{errorMsg}</div>
@@ -388,6 +408,17 @@ function RecorderTestPanel() {
       `}</style>
     </div>
   );
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function btnStyle(active: boolean, variant: "start" | "stop"): React.CSSProperties {

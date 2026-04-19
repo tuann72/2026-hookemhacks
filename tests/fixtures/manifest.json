@@ -1,0 +1,33 @@
+{
+  "_doc": "Capture WebM files via /recorder-test (Save fixture button), name them as 'file' below, drop into this folder. Edit punch counts to match what you actually threw.",
+  "clips": [
+    {
+      "file": "clip-0-3punches.webm",
+      "durationMs": 5000,
+      "events": [
+        { "type": "punch", "matchTimeOffsetMs": 800 },
+        { "type": "punch", "matchTimeOffsetMs": 2400 },
+        { "type": "punch", "matchTimeOffsetMs": 4100 }
+      ]
+    },
+    {
+      "file": "clip-1-1punches.webm",
+      "durationMs": 5000,
+      "events": [
+        { "type": "punch", "matchTimeOffsetMs": 1500 }
+      ]
+    },
+    {
+      "file": "clip-2-6punches.webm",
+      "durationMs": 5000,
+      "events": [
+        { "type": "punch", "matchTimeOffsetMs": 500 },
+        { "type": "punch", "matchTimeOffsetMs": 1400 },
+        { "type": "punch", "matchTimeOffsetMs": 2200 },
+        { "type": "punch", "matchTimeOffsetMs": 3300 },
+        { "type": "punch", "matchTimeOffsetMs": 4100 },
+        { "type": "punch", "matchTimeOffsetMs": 4500 }
+      ]
+    }
+  ]
+}
