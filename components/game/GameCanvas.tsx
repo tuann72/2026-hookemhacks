@@ -5,15 +5,18 @@ import { Environment, OrbitControls, Stats } from "@react-three/drei";
 import { Suspense } from "react";
 import { World } from "./World";
 import { Avatar, type AvatarComponent } from "./Avatar";
+import { RedBoxer } from "./RedBoxer";
+import { BlueBoxer } from "./BlueBoxer";
 import { useGameStore } from "@/lib/store/gameStore";
+import { useIdentity } from "@/hooks/useIdentity";
 import { PLAYER_SLOTS } from "@/lib/game/sportLayout";
 
 interface GameCanvasProps {
   debug?: boolean;
   /**
-   * Swap the avatar implementation (e.g. a teammate's GLTF/VRM model). Must
-   * implement `AvatarComponent` — see Avatar.tsx and CustomAvatar.tsx for
-   * the contract. Defaults to the built-in blocky humanoid.
+   * Swap the avatar implementation for non-boxing sports (e.g. a teammate's
+   * GLTF/VRM model). Boxing uses RedBoxer/BlueBoxer assigned by host identity
+   * and ignores this prop. Defaults to the built-in blocky humanoid.
    */
   AvatarComponent?: AvatarComponent;
 }
@@ -24,7 +27,14 @@ interface GameCanvasProps {
 export function GameCanvas({ debug = false, AvatarComponent = Avatar }: GameCanvasProps) {
   const sport = useGameStore((s) => s.sport);
   const players = useGameStore((s) => s.players);
+  const hostId = useGameStore((s) => s.hostId);
+  const { playerId: localId } = useIdentity();
   const slots = PLAYER_SLOTS[sport];
+
+  // Host = red boxer, joiner = blue. Fallback while hostId is still loading:
+  // treat the local player as the host so avatars render immediately. Worst
+  // case is a one-frame color flip once the room lookup resolves.
+  const isLocalHost = !hostId || localId === hostId;
 
   return (
     <Canvas
@@ -44,8 +54,13 @@ export function GameCanvas({ debug = false, AvatarComponent = Avatar }: GameCanv
         {players.map((p, i) => {
           const slot = slots[i];
           if (!slot) return null;
+          let BoxerComponent: AvatarComponent = AvatarComponent;
+          if (sport === "boxing") {
+            const isRed = p.isLocal ? isLocalHost : !isLocalHost;
+            BoxerComponent = isRed ? RedBoxer : BlueBoxer;
+          }
           return (
-            <AvatarComponent
+            <BoxerComponent
               key={p.id}
               playerId={p.id}
               position={slot.position}

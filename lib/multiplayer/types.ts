@@ -1,4 +1,4 @@
-import type { ArmState, HandState } from "@/types";
+import type { ArmState, HandState, RigRotations } from "@/types";
 
 export type RoomStatus = "waiting" | "active" | "finished";
 
@@ -82,14 +82,18 @@ export type ArmLandmarks = [
 export interface PoseSnapshot {
   playerId: string;
   timestamp: number;
-  // Null when no pose was detected this frame.
-  arms: ArmLandmarks | null;
-  // 21 landmarks per hand when detected, else null.
-  leftHand: WireLandmark[] | null;
-  rightHand: WireLandmark[] | null;
-  // Pre-derived gesture/arm metrics so receivers don't re-compute.
-  armStates: { left: ArmState | null; right: ArmState | null };
-  handStates: { left: HandState | null; right: HandState | null };
+  // Primary payload — fully solved bone rotations ready to apply on the
+  // receiver with zero re-solve. When present, receivers should prefer this
+  // over re-deriving from armStates.
+  rig?: RigRotations;
+  // Raw landmarks + derived metrics are optional and kept around so a future
+  // client can re-solve locally (e.g. to apply its own smoothing). Null/omitted
+  // when the sender only broadcasts the rig.
+  arms?: ArmLandmarks | null;
+  leftHand?: WireLandmark[] | null;
+  rightHand?: WireLandmark[] | null;
+  armStates?: { left: ArmState | null; right: ArmState | null };
+  handStates?: { left: HandState | null; right: HandState | null };
 }
 
 export type BroadcastPayload =
