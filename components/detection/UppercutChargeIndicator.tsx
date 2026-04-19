@@ -31,7 +31,7 @@ export function UppercutChargeIndicator() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute bottom-[88px] left-1/2 z-30 flex -translate-x-1/2 flex-col items-center gap-1"
+      className="pointer-events-none fixed bottom-[88px] left-1/2 z-[300] flex -translate-x-1/2 flex-col items-center gap-1"
     >
       {/* Arc ring */}
       <svg width={SIZE} height={SIZE} style={{ overflow: "visible" }}>
