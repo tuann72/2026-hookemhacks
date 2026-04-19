@@ -8,16 +8,29 @@ import { SELF_PLAYER_ID, REMOTE_PLAYER_ID } from "@/types";
 // realtime feed don't clobber each other.
 // Ref: HOOKEMHACKS_CONTEXT.md — "Never do this: useState for per-frame pose data"
 
+/**
+ * Transient punch-animation state. Written by the punch detector when a jab/
+ * cross fires; read by Avatar.useFrame to override the CV rig on the punching
+ * arm for a short window. `null` means CV drives the arms normally.
+ */
+export interface PunchAnim {
+  side: "left" | "right";
+  startedAt: number; // performance.now()
+  durationMs: number;
+}
+
 export interface PlayerPose {
   landmarks: PoseLandmark[] | null;
   rig: RigRotations | null;
   lastUpdateMs: number;
+  punchAnim: PunchAnim | null;
 }
 
 const emptyPose = (): PlayerPose => ({
   landmarks: null,
   rig: null,
   lastUpdateMs: 0,
+  punchAnim: null,
 });
 
 interface PoseStore {
@@ -28,6 +41,12 @@ interface PoseStore {
     timestampMs: number
   ) => void;
   setRig: (playerId: PlayerId, rig: RigRotations) => void;
+  setPunchAnim: (
+    playerId: PlayerId,
+    side: "left" | "right",
+    durationMs: number,
+  ) => void;
+  clearPunchAnim: (playerId: PlayerId) => void;
   clearPlayer: (playerId: PlayerId) => void;
   reset: () => void;
 }
@@ -57,6 +76,26 @@ export const usePoseStore = create<PoseStore>((set) => ({
         [playerId]: {
           ...(s.players[playerId] ?? emptyPose()),
           rig,
+        },
+      },
+    })),
+  setPunchAnim: (playerId, side, durationMs) =>
+    set((s) => ({
+      players: {
+        ...s.players,
+        [playerId]: {
+          ...(s.players[playerId] ?? emptyPose()),
+          punchAnim: { side, startedAt: performance.now(), durationMs },
+        },
+      },
+    })),
+  clearPunchAnim: (playerId) =>
+    set((s) => ({
+      players: {
+        ...s.players,
+        [playerId]: {
+          ...(s.players[playerId] ?? emptyPose()),
+          punchAnim: null,
         },
       },
     })),

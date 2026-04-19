@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import BodyDetector from "@/components/detection/BodyDetector";
+import { CalibrateGuardPanel } from "@/components/detection/CalibrateGuardPanel";
 import { useBodyDetection } from "@/hooks/useBodyDetection";
 import type { PoseLandmark } from "@/types";
 
@@ -144,12 +145,12 @@ function wrapAngle(r: number): number {
 
 // Standard MediaPipe hand skeleton — 21 landmarks, five fingers + palm bridges.
 const HAND_CONNECTIONS: [number, number][] = [
-  [0, 1], [1, 2], [2, 3], [3, 4],           // thumb
-  [0, 5], [5, 6], [6, 7], [7, 8],           // index
-  [0, 9], [9, 10], [10, 11], [11, 12],      // middle
-  [0, 13], [13, 14], [14, 15], [15, 16],    // ring
-  [0, 17], [17, 18], [18, 19], [19, 20],    // pinky
-  [5, 9], [9, 13], [13, 17],                // palm bridges
+  [0, 1], [1, 2], [2, 3], [3, 4],
+  [0, 5], [5, 6], [6, 7], [7, 8],
+  [0, 9], [9, 10], [10, 11], [11, 12],
+  [0, 13], [13, 14], [14, 15], [15, 16],
+  [0, 17], [17, 18], [18, 19], [19, 20],
+  [5, 9], [9, 13], [13, 17],
 ];
 
 function ArmsSkeletonCanvas() {
@@ -157,8 +158,6 @@ function ArmsSkeletonCanvas() {
     useBodyDetection();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Repaint on every published pose frame — the body tracker publishes new
-  // landmarks roughly every rAF tick, so this stays in sync with the webcam.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -179,7 +178,6 @@ function ArmsSkeletonCanvas() {
     const toY = (y: number) => y * height;
 
     if (poseLandmarks) {
-      // 11=shoulder, 12=shoulder, 13/14=elbow, 15/16=wrist — arms + shoulder line only
       const bones: [number, number, string][] = [
         [11, 12, "#ffcc00"],
         [11, 13, "#00ff88"],
@@ -209,7 +207,6 @@ function ArmsSkeletonCanvas() {
       }
     }
 
-    // Hands — color-matched to the arm on the same side of the rig.
     for (const [hand, color] of [
       [leftHandLandmarks, "#ff6ad5"],
       [rightHandLandmarks, "#ffd36a"],
@@ -244,73 +241,6 @@ function ArmsSkeletonCanvas() {
     </div>
   );
 }
-
-// ---------- small UI bits ----------
-
-function Bar({ ratio, met, label }: { ratio: number; met: boolean; label: string }) {
-  const pct = Math.max(0, Math.min(1, ratio)) * 100;
-  return (
-    <div className="flex items-center gap-2">
-      <span className="w-10 font-mono text-[10px] uppercase tracking-widest text-zinc-400">
-        {label}
-      </span>
-      <div className="relative h-3 flex-1 overflow-hidden rounded-full bg-zinc-800">
-        <div
-          className={`absolute inset-y-0 left-0 transition-[width] duration-75 ease-out ${
-            met ? "bg-emerald-400" : "bg-cyan-400/60"
-          }`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function ParamSlider({
-  label,
-  value,
-  onChange,
-  range,
-  suffix,
-  format,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  range: Range;
-  suffix?: string;
-  format?: (v: number) => string;
-}) {
-  // Guard against undefined (e.g. HMR-stale state missing a newly added
-  // Params field) — keeps the input controlled for the component's lifetime.
-  const safeValue = Number.isFinite(value) ? value : range.min;
-  const off = isOff(safeValue, range);
-  return (
-    <div>
-      <div className="mb-1 flex items-baseline justify-between">
-        <label className="text-[11px] uppercase tracking-widest text-zinc-400">{label}</label>
-        <span
-          className={`font-mono text-xs tabular-nums ${
-            off ? "text-rose-400" : "text-emerald-300"
-          }`}
-        >
-          {off ? "OFF" : (format ? format(safeValue) : safeValue.toFixed(2)) + (suffix ?? "")}
-        </span>
-      </div>
-      <input
-        type="range"
-        min={range.min}
-        max={range.max}
-        step={range.step}
-        value={safeValue}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-full accent-cyan-400"
-      />
-    </div>
-  );
-}
-
-// ---------- main ----------
 
 function PunchTest() {
   const body = useBodyDetection();
@@ -632,7 +562,6 @@ function PunchTest() {
 
   return (
     <div className="relative min-h-screen bg-zinc-950 text-zinc-100">
-      {/* Top bar */}
       <div className="flex items-center justify-between border-b border-zinc-800 px-6 py-4">
         <div>
           <div className="text-[10px] uppercase tracking-[0.4em] text-cyan-400">
@@ -879,71 +808,6 @@ function PunchTest() {
       </div>
 
       <ArmsSkeletonCanvas />
-    </div>
-  );
-}
-
-function MetricsCard({
-  side,
-  metrics,
-  active,
-}: {
-  side: string;
-  metrics: HandMetrics;
-  active: Params;
-}) {
-  const sizeOff = isOff(active.size, RANGES.size);
-  const rotOff = isOff(active.rotation, RANGES.rotation);
-  const velOff = isOff(active.velocity, RANGES.velocity);
-  return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-[0.3em] text-zinc-400">
-          {side} hand
-        </span>
-        <span
-          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest ${
-            metrics.detected
-              ? metrics.inGuard
-                ? "bg-emerald-500/20 text-emerald-200"
-                : "bg-cyan-500/10 text-cyan-200"
-              : "bg-zinc-800 text-zinc-500"
-          }`}
-        >
-          {metrics.detected ? (metrics.inGuard ? "guard" : "tracking") : "no hand"}
-        </span>
-      </div>
-      <div className="space-y-2">
-        <Bar
-          label="size"
-          ratio={sizeOff ? 0 : metrics.sizeRatio}
-          met={!sizeOff && metrics.sizeMet}
-        />
-        <Bar
-          label="rot"
-          ratio={rotOff ? 0 : metrics.rotRatio}
-          met={!rotOff && metrics.rotMet}
-        />
-        <Bar
-          label="vel"
-          ratio={velOff ? 0 : metrics.velRatio}
-          met={!velOff && metrics.velMet}
-        />
-      </div>
-      <div className="mt-3 grid grid-cols-3 gap-2 font-mono text-[10px] tabular-nums text-zinc-500">
-        <span>
-          s <span className="text-zinc-300">{metrics.size.toFixed(3)}</span>
-        </span>
-        <span>
-          r{" "}
-          <span className="text-zinc-300">
-            {((metrics.rotation * 180) / Math.PI).toFixed(0)}°
-          </span>
-        </span>
-        <span>
-          v <span className="text-zinc-300">{metrics.velocity.toFixed(2)}</span>
-        </span>
-      </div>
     </div>
   );
 }

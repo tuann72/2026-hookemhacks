@@ -148,7 +148,9 @@ export default function GamePage() {
         />
       )}
 
-      {step === "game" && <GameScreen />}
+      {step === "game" && (
+        <GameScreen roomId={roomUuid ?? undefined} playerId={playerId || undefined} />
+      )}
 
       {!ready && (
         <div className="connect-overlay" aria-live="polite" role="status">

@@ -22,10 +22,14 @@ export const PLAYER_SLOTS: Record<Sport, [PlayerSlot, PlayerSlot]> = {
     { position: [0.8, 0, 1.8], rotationY: 0 },
   ],
   // Boxing: red corner vs blue corner, facing each other across the canvas.
-  // Platform top is y=0.3; ring center is z=-1.6. Fighters stand ~1.5 units
-  // off center so they're closer in for the camera framing.
+  // Platform top y=0.3; ring center z=-1.6. Spacing is tightened so a fully
+  // extended right arm (upper 0.30m + forearm 0.28m = 0.58m reach) can just
+  // touch the opponent's front torso (torso half-depth 0.14m). Avatar
+  // centers 0.72m apart: fist Z = -0.58 from shoulder, front edge = 0.14
+  // from defender center → contact right at the torso front. Still above
+  // AvatarCollisionResolver's 0.70m min separation so they don't shove.
   boxing: [
-    { position: [0, 0.3, -0.1], rotationY: Math.PI },
-    { position: [0, 0.3, -3.1], rotationY: 0 },
+    { position: [0, 0.3, -1.15], rotationY: Math.PI },
+    { position: [0, 0.3, -2.15], rotationY: 0 },
   ],
 };
