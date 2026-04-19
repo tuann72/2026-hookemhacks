@@ -84,6 +84,7 @@ export default function LobbyPage() {
       roomId: room?.id ?? "",
       playerId,
       playerName: playerName || playerId,
+      initialTint: loadStoredTint() ?? undefined,
       onGameEvent: (e) => {
         if (e.type === "game_start") router.push(`/game/${code}`);
       },

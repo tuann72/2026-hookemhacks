@@ -16,6 +16,8 @@ import { usePoseStore } from "@/lib/store/poseStore";
 import { useRemoteGuardStore } from "@/lib/store/remoteGuardStore";
 import { setHitBroadcaster } from "@/lib/multiplayer/hitBroadcaster";
 import { useCalibrationSignalStore } from "@/lib/store/calibrationSignalStore";
+import { useCameraStore } from "@/lib/store/cameraStore";
+import { isTargetInGuard } from "@/lib/combat";
 import { loadStoredTint } from "@/lib/game/avatarColors";
 import { REMOTE_PLAYER_ID, SELF_PLAYER_ID } from "@/types";
 
@@ -67,10 +69,19 @@ export default function GamePage() {
     };
   }, [code, setHostId]);
 
+  // Reset HP/score/phase every time we enter a match. Zustand is a singleton,
+  // so a return-to-lobby-then-new-match flow would otherwise carry the prior
+  // match's ending HP (often 0) into the fresh fight. Rematch has its own
+  // reset; this covers lobby → game transitions.
+  useEffect(() => {
+    useGameStore.getState().reset();
+  }, []);
+
   const { broadcastGameEvent, broadcastHit, broadcastPoseSnapshot, connected, players, peerBroadcastSeen, setTint } = useGameChannel({
     roomId: roomUuid ?? "",
     playerId,
     playerName: playerName || playerId,
+    initialTint: loadStoredTint() ?? undefined,
     onGameEvent: (e) => {
       if (e.type === "game_end") router.push(`/lobby/${code}`);
       else if (e.type === "rematch") {
@@ -93,6 +104,11 @@ export default function GamePage() {
       // their "remote" = our "self", and vice versa.
       const localTargetId = hit.targetId === REMOTE_PLAYER_ID ? SELF_PLAYER_ID : REMOTE_PLAYER_ID;
       useGameStore.getState().damagePlayer(localTargetId, hit.damage);
+      // Direct hit on us (guard down) → wobble the camera. Local guard state
+      // is the source of truth for whether we blocked it.
+      if (localTargetId === SELF_PLAYER_ID && !isTargetInGuard(SELF_PLAYER_ID)) {
+        useCameraStore.getState().requestShake(1);
+      }
     },
     onPoseSnapshot: (snap) => {
       // Ignore our own echo (GameChannel uses broadcast self:false, so this
@@ -109,6 +125,9 @@ export default function GamePage() {
       if (snap.playerId === playerId) return;
       if (snap.rig) usePoseStore.getState().setRig(REMOTE_PLAYER_ID, snap.rig);
       if (snap.inGuard) useRemoteGuardStore.getState().set(snap.inGuard);
+      // Every pose frame carries the sender's tint — keeps the opponent's
+      // avatar color in sync even if the presence update was dropped.
+      if (snap.tint) useGameStore.getState().setPlayerTint(REMOTE_PLAYER_ID, snap.tint);
     },
   });
 

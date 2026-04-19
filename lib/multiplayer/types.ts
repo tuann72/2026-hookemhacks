@@ -84,6 +84,12 @@ export type ArmLandmarks = [
 export interface PoseSnapshot {
   playerId: string;
   timestamp: number;
+  /**
+   * Sender's current avatar tint (hex). Piggy-backed on every pose frame so
+   * receivers can sync the opponent's color without depending on presence
+   * delivery. Undefined when the sender hasn't chosen a color yet.
+   */
+  tint?: string;
   // Primary payload — fully solved bone rotations ready to apply on the
   // receiver with zero re-solve. When present, receivers should prefer this
   // over re-deriving from armStates.
@@ -99,7 +105,7 @@ export interface PoseSnapshot {
   /**
    * Sender's live guard flags (hand-near-baseline, per side). Consumed by
    * the receiver's damage helper so a defender's guard reduces incoming
-   * punch/ball damage.
+   * punch damage.
    */
   inGuard?: { left: boolean; right: boolean };
 }

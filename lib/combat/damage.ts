@@ -11,20 +11,17 @@
 // ─── Health ──────────────────────────────────────────────────────────────────
 
 /** Starting and max HP for every player. */
-export const MAX_HP = 100;
+export const MAX_HP = 200;
 
 // ─── Raw damage amounts ──────────────────────────────────────────────────────
 
 /** Damage applied on a counted punch hit, before guard mitigation. */
 export const PUNCH_DAMAGE_BASE = 10;
 
-/** Damage applied when a falling ball lands on a player, before guard mitigation. */
-export const BALL_DAMAGE_BASE = 15;
-
 // ─── Mitigation ──────────────────────────────────────────────────────────────
 
 /** Multiplier applied to damage when the target is in guard (0..1). 0.5 = 50% mitigation. */
-export const GUARD_MULTIPLIER = 0.5;
+export const GUARD_MULTIPLIER = 0.2;
 
 // ─── Punch timing & collision ────────────────────────────────────────────────
 
