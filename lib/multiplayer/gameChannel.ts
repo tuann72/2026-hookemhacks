@@ -15,6 +15,7 @@ type HitHandler = (hit: HitEvent) => void;
 type GameEventHandler = (event: GameEvent) => void;
 type PoseSnapshotHandler = (snapshot: PoseSnapshot) => void;
 type PresenceHandler = (players: PlayerPresence[]) => void;
+type TintChangeHandler = (playerId: string, tint: string) => void;
 
 interface SubscribeHandlers {
   onPlayerState?: PlayerStateHandler;
@@ -23,6 +24,13 @@ interface SubscribeHandlers {
   onGameEvent?: GameEventHandler;
   onPoseSnapshot?: PoseSnapshotHandler;
   onPresenceChange?: PresenceHandler;
+  /**
+   * Fires when a peer publishes a tint change. Piggy-backed as a dedicated
+   * broadcast because Supabase presence updates to an existing key don't
+   * reliably fire `sync` on the peer, so a runtime color change in the lobby
+   * otherwise wouldn't propagate.
+   */
+  onTintChange?: TintChangeHandler;
 }
 
 // Exponential backoff for reconnects. 500 ms → 1 s → 2 s → 4 s, capped at 8 s.
@@ -57,11 +65,21 @@ export class GameChannel {
   // retry scheduler during that window.
   private reconnecting = false;
 
-  constructor(roomId: string, playerId: string, playerName: string) {
+  constructor(
+    roomId: string,
+    playerId: string,
+    playerName: string,
+    initialTint?: string,
+  ) {
     this.roomId = roomId;
     this.playerId = playerId;
     this.playerName = playerName;
     this.onlineAt = new Date().toISOString();
+    // Pre-seed tint so the first trackPresence on SUBSCRIBED already carries
+    // it. Without this, the channel tracks with tint=undefined, setTint fires
+    // a second track soon after, and peers can race into a render where only
+    // the stale sync has landed.
+    this.tint = initialTint;
     this.channel = this.createChannel();
   }
 
@@ -95,6 +113,16 @@ export class GameChannel {
 
   async setTint(tint: string): Promise<void> {
     this.tint = tint;
+    // Explicit broadcast — presence `track()` updates don't always fire a
+    // `sync` event on peers, so a runtime color change would otherwise not
+    // reach the other side until a reconnect. The broadcast is the source of
+    // truth for the peer's render; trackPresence is kept only so late-joiners
+    // still see the right tint in their initial presence sync.
+    this.channel.send({
+      type: "broadcast",
+      event: "tint",
+      payload: { playerId: this.playerId, tint },
+    });
     await this.trackPresence();
   }
 
@@ -138,6 +166,13 @@ export class GameChannel {
       this.channel.on("broadcast", { event: "pose" }, ({ payload }) =>
         h.onPoseSnapshot!(payload as PoseSnapshot),
       );
+    }
+
+    if (h.onTintChange) {
+      this.channel.on("broadcast", { event: "tint" }, ({ payload }) => {
+        const p = payload as { playerId: string; tint: string };
+        h.onTintChange!(p.playerId, p.tint);
+      });
     }
 
     if (h.onPresenceChange) {
@@ -197,8 +232,19 @@ export class GameChannel {
             payload: {
               playerId: this.playerId,
               timestamp: performance.now(),
+              tint: this.tint,
             } satisfies PoseSnapshot,
           });
+          // Also re-announce tint as a dedicated broadcast — covers the case
+          // where a peer just arrived and would otherwise miss any earlier
+          // color change that happened before they subscribed.
+          if (this.tint) {
+            this.channel.send({
+              type: "broadcast",
+              event: "tint",
+              payload: { playerId: this.playerId, tint: this.tint },
+            });
+          }
           // Defer the retry-counter reset: only clear it after the channel
           // has been SUBSCRIBED continuously for 5s. This keeps the backoff
           // climbing during SUBSCRIBED→CLOSED oscillation (which otherwise
@@ -315,6 +361,11 @@ export class GameChannel {
       type: "broadcast",
       event: "pose",
       payload: {
+        // Carry tint on every pose frame as a redundant sync channel. Presence
+        // occasionally drops the tint update during the /lobby→/game channel
+        // flip; 12 Hz pose broadcasts mean the peer converges within ~80ms
+        // even when presence races.
+        tint: this.tint,
         ...snapshot,
         playerId: this.playerId,
         timestamp: performance.now(),

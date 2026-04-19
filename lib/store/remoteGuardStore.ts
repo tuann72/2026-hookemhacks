@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 // Remote player's guard state, mirrored from their pose broadcast. Read by
-// the damage helper when a punch or ball strikes REMOTE_PLAYER_ID.
+// the damage helper when a punch strikes REMOTE_PLAYER_ID.
 
 interface RemoteGuardStore {
   left: boolean;

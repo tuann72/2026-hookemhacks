@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useMemo, useRef, useCallback, useState } from "react";
 import { GameChannel } from "@/lib/multiplayer/gameChannel";
 import type {
   PlayerState,
@@ -15,6 +15,13 @@ interface UseGameChannelOptions {
   roomId: string;
   playerId: string;
   playerName: string;
+  /**
+   * Tint to seed into presence on the first trackPresence. Prevents the race
+   * where the channel subscribes with tint=undefined and a follow-up setTint
+   * fires a second trackPresence, sometimes leaving peers on the stale sync.
+   * Read at construction time only — later tint changes must go through setTint.
+   */
+  initialTint?: string;
   onPlayerState?: (state: PlayerState) => void;
   onAttack?: (attack: AttackEvent) => void;
   onHit?: (hit: HitEvent) => void;
@@ -26,6 +33,7 @@ export function useGameChannel({
   roomId,
   playerId,
   playerName,
+  initialTint,
   onPlayerState,
   onAttack,
   onHit,
@@ -34,7 +42,20 @@ export function useGameChannel({
 }: UseGameChannelOptions) {
   const channelRef = useRef<GameChannel | null>(null);
   const [connected, setConnected] = useState(false);
-  const [players, setPlayers] = useState<PlayerPresence[]>([]);
+  const [rawPlayers, setRawPlayers] = useState<PlayerPresence[]>([]);
+  // Broadcast-received tint per playerId. Overrides the presence-derived tint
+  // when merging into the final `players` array — Supabase presence updates
+  // to an existing key don't always fire sync, so we treat the tint broadcast
+  // as authoritative for runtime color changes.
+  const [tintOverrides, setTintOverrides] = useState<Record<string, string>>({});
+  const players = useMemo(
+    () =>
+      rawPlayers.map((p) => {
+        const override = tintOverrides[p.playerId];
+        return override ? { ...p, tint: override } : p;
+      }),
+    [rawPlayers, tintOverrides],
+  );
   // True once the first broadcast from any peer has arrived. Consumers use
   // this as the "both sides wired up" signal to hide loading overlays —
   // presence alone isn't enough (the wedged-listener bug means presence
@@ -55,6 +76,11 @@ export function useGameChannel({
   useEffect(() => { onHitRef.current = onHit; }, [onHit]);
   useEffect(() => { onGameEventRef.current = onGameEvent; }, [onGameEvent]);
   useEffect(() => { onPoseSnapshotRef.current = onPoseSnapshot; }, [onPoseSnapshot]);
+
+  // initialTint via ref so a tint change doesn't tear down + recreate the
+  // channel. Only the first construction reads it; later updates go via setTint.
+  const initialTintRef = useRef(initialTint);
+  useEffect(() => { initialTintRef.current = initialTint; }, [initialTint]);
 
   // Reconnect-on-peer-arrival bookkeeping. We keep kicking `reconnect()` on a
   // backoff schedule as long as a peer is in presence but hasn't sent a
@@ -77,7 +103,13 @@ export function useGameChannel({
     peerBroadcastSeenRef.current = false;
     setPeerBroadcastSeen(false);
     setKickAttempt(0);
-    const channel = new GameChannel(roomId, playerId, playerName);
+    setTintOverrides({});
+    const channel = new GameChannel(
+      roomId,
+      playerId,
+      playerName,
+      initialTintRef.current,
+    );
     channelRef.current = channel;
 
     // Stamps last-broadcast-from-peer so the fallback-kick effect can tell
@@ -98,7 +130,13 @@ export function useGameChannel({
         onHit: (h) => { stamp(); onHitRef.current?.(h); },
         onGameEvent: (e) => { stamp(); onGameEventRef.current?.(e); },
         onPoseSnapshot: (p) => { stamp(); onPoseSnapshotRef.current?.(p); },
-        onPresenceChange: setPlayers,
+        onPresenceChange: setRawPlayers,
+        onTintChange: (pid, tint) => {
+          stamp();
+          setTintOverrides((prev) =>
+            prev[pid] === tint ? prev : { ...prev, [pid]: tint },
+          );
+        },
       })
       .then(() => {
         if (!cancelled) setConnected(true);

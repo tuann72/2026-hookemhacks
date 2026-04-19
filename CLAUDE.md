@@ -83,7 +83,7 @@ lib/
   recording/     (stub placeholder)
   rigging/       Landmarks → humanoid bone rotations
   search/        Gemini query planner + dispatcher (aggregate / retrieve / hybrid)
-  store/         Zustand stores (game, pose, balls, armSim, calibration, remoteGuard)
+  store/         Zustand stores (game, pose, armSim, calibration, remoteGuard)
   supabase/      client.ts (browser) + server.ts (SSR) + realtime helpers
   gemini.ts      Shared Gemini client + MODELS map + normalize()
 

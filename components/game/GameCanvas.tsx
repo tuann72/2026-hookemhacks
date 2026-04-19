@@ -1,11 +1,11 @@
 "use client";
 
-import { Canvas, useThree } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, Html, OrbitControls, Stats } from "@react-three/drei";
+import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import { AvatarCollisionResolver } from "./avatarCollision";
-import { FallingBalls } from "./FallingBalls";
 import { World } from "./World";
 import { Avatar, AVATAR_SCALE, type AvatarComponent } from "./Avatar";
 import { useGameStore } from "@/lib/store/gameStore";
@@ -99,7 +99,6 @@ export function GameCanvas({ debug = false, AvatarComponent = Avatar }: GameCanv
         })}
         {/* Lightweight XY separation — pushes overlapping avatars apart. */}
         <AvatarCollisionResolver />
-        <FallingBalls />
         <Environment preset="sunset" />
       </Suspense>
 
@@ -116,6 +115,7 @@ export function GameCanvas({ debug = false, AvatarComponent = Avatar }: GameCanv
         oppHead={oppHead}
         controlsRef={controlsRef}
       />
+      <CameraShakeController />
       {debug && (
         <>
           {/* Floor grid (XZ plane) — 20×20 units, 1-unit cells. Center axis
@@ -193,6 +193,59 @@ function AxisLabels() {
       {tickEls}
     </>
   );
+}
+
+function CameraShakeController() {
+  // Hit reaction: on shakeTick bump, capture camera.position as baseline and
+  // perturb it with a decaying high-frequency offset for ~350ms, then restore.
+  // OrbitControls without damping doesn't run update() per frame, so direct
+  // writes to camera.position stick between frames.
+  const { camera } = useThree();
+  const shakeTick = useCameraStore((s) => s.shakeTick);
+  const shakeIntensity = useCameraStore((s) => s.shakeIntensity);
+  const activeRef = useRef<{
+    start: number;
+    duration: number;
+    amp: number;
+    base: THREE.Vector3;
+    seed: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (shakeTick === 0) return;
+    activeRef.current = {
+      start: performance.now(),
+      duration: 380,
+      amp: 0.09 * shakeIntensity,
+      base: camera.position.clone(),
+      seed: Math.random() * 1000,
+    };
+  }, [shakeTick, shakeIntensity, camera]);
+
+  useFrame(() => {
+    const shake = activeRef.current;
+    if (!shake) return;
+    const elapsed = performance.now() - shake.start;
+    if (elapsed >= shake.duration) {
+      camera.position.copy(shake.base);
+      activeRef.current = null;
+      return;
+    }
+    const t = elapsed / shake.duration;
+    const decay = (1 - t) * (1 - t);
+    const a = shake.amp * decay;
+    const phase = shake.seed + elapsed * 0.045;
+    const ox = Math.sin(phase * 1.3) * a;
+    const oy = Math.cos(phase * 1.7) * a;
+    const oz = Math.sin(phase * 2.1) * a * 0.3;
+    camera.position.set(
+      shake.base.x + ox,
+      shake.base.y + oy,
+      shake.base.z + oz,
+    );
+  });
+
+  return null;
 }
 
 function CameraController({

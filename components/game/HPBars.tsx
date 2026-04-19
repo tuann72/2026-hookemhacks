@@ -20,13 +20,11 @@ function HPBar({
   name,
   hp,
   maxHp,
-  tint,
   side,
 }: {
   name: string;
   hp: number;
   maxHp: number;
-  tint: string;
   side: Side;
 }) {
   const ratio = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
@@ -45,14 +43,15 @@ function HPBar({
         style={{
           display: "flex",
           justifyContent: "space-between",
-          fontSize: 10,
+          fontSize: 13,
+          fontWeight: 700,
           letterSpacing: "0.3em",
           textTransform: "uppercase",
           marginBottom: 6,
           flexDirection: rightAligned ? "row-reverse" : "row",
         }}
       >
-        <span style={{ color: tint }}>{name}</span>
+        <span style={{ color: "#000" }}>{name}</span>
         <span style={{ fontVariantNumeric: "tabular-nums", color: "#a1a1aa" }}>
           {Math.round(hp)} / {maxHp}
         </span>
@@ -83,6 +82,16 @@ function HPBar({
             transition: "width 180ms ease-out, background 180ms ease-out",
           }}
         />
+        {/* Translucent white overlay above the fill — softens the color and
+            gives the bar a glossy, higher-contrast read against the stage. */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "rgba(255,255,255,0.35)",
+            pointerEvents: "none",
+          }}
+        />
       </div>
     </div>
   );
@@ -100,7 +109,7 @@ export function HPBars() {
           style={{
             position: "absolute",
             left: 24,
-            bottom: 24,
+            bottom: 64,
             zIndex: 5,
             pointerEvents: "none",
           }}
@@ -109,7 +118,6 @@ export function HPBars() {
             name={self.displayName}
             hp={self.hp}
             maxHp={self.maxHp}
-            tint={self.tint}
             side="left"
           />
         </div>
@@ -128,7 +136,6 @@ export function HPBars() {
             name={remote.displayName}
             hp={remote.hp}
             maxHp={remote.maxHp}
-            tint={remote.tint}
             side="right"
           />
         </div>
