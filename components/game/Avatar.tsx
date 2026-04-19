@@ -57,11 +57,12 @@ const NECK_LEN = 0.1;
 const HEAD_LEN = 0.22;
 
 const SHOULDER_OFFSET_X = 0.36;
-// Compromise length: long enough to cross the ~2.2 m slot gap (both fighters
-// positioned outside the red center circle), still reads as a boxer-like
-// arm once the whole avatar is AVATAR_SCALE'd up. Ratio ≈ 0.68 of body.
-const UPPER_ARM_LEN = 0.51;
-const LOWER_ARM_LEN = 0.51;
+// Human-ish proportions (~1.3 / ~1.1 heads for a ~6-head avatar). Total
+// shoulder→wrist ≈ 0.65m before AVATAR_SCALE. This is shorter than the arm
+// length that was tuned to cross the 2.6m boxing slot gap — if punches need
+// to connect, tighten slots in sportLayout.ts or bump AVATAR_SCALE.
+const UPPER_ARM_LEN = 0.35;
+const LOWER_ARM_LEN = 0.30;
 const HAND_LEN = 0.12;
 
 // Uniform root scale applied to the whole avatar. Keeps arm/torso/head
@@ -76,7 +77,9 @@ const LOWER_LEG_LEN = 0.42;
 const FOOT_D = 0.22;
 
 // --- Limb / part visual widths --------------------------------------------
-const LIMB_W = 0.14;
+// Thinner than before — reads more human than chunky blocky-humanoid. Arms
+// use LIMB_W / LIMB_W*0.85 (upper/lower); legs use LIMB_W*1.2 / LIMB_W.
+const LIMB_W = 0.09;
 const TORSO_W = 0.5;
 const TORSO_D = 0.28;
 const HEAD_R = 0.17;
