@@ -14,14 +14,14 @@ export async function POST(req: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const { count, error } = await supabase
+  const { data, error } = await supabase
     .from("clips")
     .update({ embedding_status: "pending" })
     .eq("embedding_status", "processing")
     .lt("created_at", new Date(Date.now() - 10 * 60 * 1000).toISOString())
-    .select("id", { count: "exact", head: true });
+    .select("id");
 
   if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
 
-  return Response.json({ ok: true, reset: count ?? 0 });
+  return Response.json({ ok: true, reset: data?.length ?? 0 });
 }
