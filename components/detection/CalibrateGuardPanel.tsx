@@ -43,6 +43,7 @@ export function CalibrateGuardPanel({
   const rightMetrics = usePunchCalibrationStore((s) => s.rightMetrics);
   const setPending = usePunchCalibrationStore((s) => s.setPending);
   const applyPending = usePunchCalibrationStore((s) => s.applyPending);
+  const setBaseline = usePunchCalibrationStore((s) => s.setBaseline);
 
   const calibratedLeft = !!baseline?.left;
   const calibratedRight = !!baseline?.right;
@@ -108,6 +109,15 @@ export function CalibrateGuardPanel({
                   .filter(Boolean)
                   .join(" + ")}. Press again to re-capture any visible hand.`
               : "Hold your guard, then press. Any visible hand is captured."}
+          {anyCalibrated && countdown === null && (
+            <button
+              type="button"
+              onClick={() => setBaseline(null)}
+              className="mt-1 block text-[10px] uppercase tracking-[0.3em] text-rose-400/80 underline-offset-2 hover:text-rose-300 hover:underline"
+            >
+              Clear lock
+            </button>
+          )}
           {calibrateMsg && (
             <div className="mt-1 text-rose-400">{calibrateMsg}</div>
           )}
