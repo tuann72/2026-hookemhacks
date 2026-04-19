@@ -22,8 +22,11 @@ const SIDES = {
 } as const;
 
 const WINDUP = { upperX: 0.45, upperZ: 0.15, lowerX: -1.7 };
-const THRUST_FALLBACK = { upperX: -1.25, upperZ: 0.05 };
-const THRUST_LOWER_X = 0.05;
+// Fully horizontal thrust — UpperArm.x = -π/2 points the local rest-down arm
+// along avatar-local forward (+Z), which after the slot's rotationY flip is
+// world −Z for the red corner. Elbow locked to 0 so the arm extends straight.
+const THRUST_FALLBACK = { upperX: -Math.PI / 2, upperZ: 0 };
+const THRUST_LOWER_X = 0;
 
 function smoothstep(t: number): number {
   const c = Math.max(0, Math.min(1, t));

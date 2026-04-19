@@ -41,51 +41,51 @@ export default function WorldPage() {
     <BodyDetector debug={debug}>
       <CVRigBridge playerId={SELF_PLAYER_ID} />
       <div className="relative h-screen w-screen overflow-hidden bg-black">
-        <GameCanvas debug={false} />
+        <GameCanvas debug={debugPanel} />
         <HPBars />
         <DropBallButton />
         <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">
           world · CV driven{debug ? " · feed bottom-right" : ""}
         </div>
+        <PunchDebugLayer
+          debugPanel={debugPanel}
+          onToggleDebug={() => setDebugPanel((v) => !v)}
+          onCloseDebug={() => setDebugPanel(false)}
+        />
       </div>
-      <WorldContent
-        debug={debug}
-        debugPanel={debugPanel}
-        onToggleDebug={() => setDebugPanel((v) => !v)}
-        onCloseDebug={() => setDebugPanel(false)}
-      />
     </BodyDetector>
   );
 }
 
-function WorldContent({
-  debug,
+function PunchDebugLayer({
   debugPanel,
   onToggleDebug,
   onCloseDebug,
 }: {
-  debug: boolean;
   debugPanel: boolean;
   onToggleDebug: () => void;
   onCloseDebug: () => void;
 }) {
   // Single detector instance — fires punchAnim on the player's pose slot and
   // exposes calibration callbacks for the debug panel to reuse.
+  //
+  // Side mapping: the CV arm rig (useBodyDetection.ts:160-170) swaps anatomical
+  // left/right so `leftArm` state drives `LeftUpperArm`. The punch detector's
+  // `left`/`right` labels land on the OPPOSITE arm from what the CV rig is
+  // animating, so we invert here so the punch override plays on the same arm
+  // the user physically threw.
   const onPunch = useCallback((side: "left" | "right") => {
-    usePoseStore.getState().setPunchAnim(SELF_PLAYER_ID, side, 400);
+    const mirrored = side === "left" ? "right" : "left";
+    usePoseStore.getState().setPunchAnim(SELF_PLAYER_ID, mirrored, 400);
   }, []);
   const { onCalibrate, onResetCounts } = usePunchDetector({ onPunch });
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-black">
-      <GameCanvas debug={false} />
-      <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">
-        world · CV driven{debug ? " · feed bottom-right" : ""}
-      </div>
+    <>
       <button
         type="button"
         onClick={onToggleDebug}
-        className={`absolute right-4 top-4 rounded-md px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.3em] transition ${
+        className={`absolute left-6 top-[64px] z-10 rounded-md px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.3em] transition ${
           debugPanel
             ? "border border-rose-500/60 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20"
             : "border border-cyan-500/60 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20"
@@ -101,6 +101,6 @@ function WorldContent({
           onClose={onCloseDebug}
         />
       )}
-    </div>
+    </>
   );
 }

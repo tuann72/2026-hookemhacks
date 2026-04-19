@@ -43,20 +43,20 @@ export function GameScreen({ onEnd: _onEnd }: GameScreenProps) {
     <BodyDetector debug={debug}>
       <CVRigBridge playerId={SELF_PLAYER_ID} />
       <div className="relative h-screen w-screen overflow-hidden bg-black">
-        <GameCanvas debug={false} />
+        <GameCanvas debug={debugPanel} />
         <HPBars />
         <DropBallButton />
+        <PunchDebugLayer
+          debugPanel={debugPanel}
+          onToggleDebug={() => setDebugPanel((v) => !v)}
+          onCloseDebug={() => setDebugPanel(false)}
+        />
       </div>
-      <GameStageContent
-        debugPanel={debugPanel}
-        onToggleDebug={() => setDebugPanel((v) => !v)}
-        onCloseDebug={() => setDebugPanel(false)}
-      />
     </BodyDetector>
   );
 }
 
-function GameStageContent({
+function PunchDebugLayer({
   debugPanel,
   onToggleDebug,
   onCloseDebug,
@@ -65,18 +65,21 @@ function GameStageContent({
   onToggleDebug: () => void;
   onCloseDebug: () => void;
 }) {
+  // Side mapping: see comment in app/world/page.tsx PunchDebugLayer — the CV
+  // arm rig swaps anatomical sides, so we invert the punch label here so the
+  // override plays on the same arm the user physically threw.
   const onPunch = useCallback((side: "left" | "right") => {
-    usePoseStore.getState().setPunchAnim(SELF_PLAYER_ID, side, 400);
+    const mirrored = side === "left" ? "right" : "left";
+    usePoseStore.getState().setPunchAnim(SELF_PLAYER_ID, mirrored, 400);
   }, []);
   const { onCalibrate, onResetCounts } = usePunchDetector({ onPunch });
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-black">
-      <GameCanvas debug={false} />
+    <>
       <button
         type="button"
         onClick={onToggleDebug}
-        className={`absolute right-4 top-4 z-10 rounded-md px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.3em] transition ${
+        className={`absolute left-6 top-[64px] z-10 rounded-md px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.3em] transition ${
           debugPanel
             ? "border border-rose-500/60 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20"
             : "border border-cyan-500/60 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20"
@@ -92,6 +95,6 @@ function GameStageContent({
           onClose={onCloseDebug}
         />
       )}
-    </div>
+    </>
   );
 }
