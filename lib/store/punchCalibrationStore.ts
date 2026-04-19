@@ -30,6 +30,10 @@ interface PunchCalibrationStore {
   /** Live punch counts. Reset by the panel or when applying new params. */
   leftCount: number;
   rightCount: number;
+  uppercutCount: number;
+  /** Uppercut charge + mode state. Published by the detector each frame. */
+  isUppercutMode: boolean;
+  chargeProgress: number; // 0..1
   /** Live per-hand detection metrics. Published by the detector each frame. */
   leftMetrics: HandMetrics;
   rightMetrics: HandMetrics;
@@ -45,6 +49,9 @@ interface PunchCalibrationStore {
   setCalibrateMsg: (msg: string | null) => void;
   setLeftCount: (n: number | ((prev: number) => number)) => void;
   setRightCount: (n: number | ((prev: number) => number)) => void;
+  setUppercutCount: (n: number | ((prev: number) => number)) => void;
+  setIsUppercutMode: (b: boolean) => void;
+  setChargeProgress: (p: number) => void;
   setLeftMetrics: (m: HandMetrics) => void;
   setRightMetrics: (m: HandMetrics) => void;
   resetCounts: () => void;
@@ -59,6 +66,9 @@ export const usePunchCalibrationStore = create<PunchCalibrationStore>((set) => (
   calibrateMsg: null,
   leftCount: 0,
   rightCount: 0,
+  uppercutCount: 0,
+  isUppercutMode: false,
+  chargeProgress: 0,
   leftMetrics: EMPTY_METRICS,
   rightMetrics: EMPTY_METRICS,
 
@@ -83,9 +93,13 @@ export const usePunchCalibrationStore = create<PunchCalibrationStore>((set) => (
     set((s) => ({ leftCount: typeof n === "function" ? n(s.leftCount) : n })),
   setRightCount: (n) =>
     set((s) => ({ rightCount: typeof n === "function" ? n(s.rightCount) : n })),
+  setUppercutCount: (n) =>
+    set((s) => ({ uppercutCount: typeof n === "function" ? n(s.uppercutCount) : n })),
+  setIsUppercutMode: (b) => set({ isUppercutMode: b }),
+  setChargeProgress: (p) => set({ chargeProgress: p }),
   setLeftMetrics: (m) => set({ leftMetrics: m }),
   setRightMetrics: (m) => set({ rightMetrics: m }),
-  resetCounts: () => set({ leftCount: 0, rightCount: 0 }),
+  resetCounts: () => set({ leftCount: 0, rightCount: 0, uppercutCount: 0, isUppercutMode: false, chargeProgress: 0 }),
   reset: () =>
     set({
       pending: DEFAULTS,
@@ -95,6 +109,9 @@ export const usePunchCalibrationStore = create<PunchCalibrationStore>((set) => (
       calibrateMsg: null,
       leftCount: 0,
       rightCount: 0,
+      uppercutCount: 0,
+      isUppercutMode: false,
+      chargeProgress: 0,
       leftMetrics: EMPTY_METRICS,
       rightMetrics: EMPTY_METRICS,
     }),

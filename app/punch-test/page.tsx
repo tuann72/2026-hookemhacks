@@ -6,6 +6,7 @@ import BodyDetector from "@/components/detection/BodyDetector";
 import { CalibrateGuardPanel } from "@/components/detection/CalibrateGuardPanel";
 import { useBodyDetection } from "@/hooks/useBodyDetection";
 import { usePunchDetector } from "@/hooks/usePunchDetector";
+import type { PoseLandmark } from "@/types";
 
 // Standard MediaPipe hand skeleton — 21 landmarks, five fingers + palm bridges.
 const HAND_CONNECTIONS: [number, number][] = [
@@ -74,7 +75,7 @@ function ArmsSkeletonCanvas() {
     for (const [hand, color] of [
       [leftHandLandmarks, "#ff6ad5"],
       [rightHandLandmarks, "#ffd36a"],
-    ] as const) {
+    ] as [PoseLandmark[] | null, string][]) {
       if (!hand || hand.length < 21) continue;
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
@@ -108,7 +109,6 @@ function ArmsSkeletonCanvas() {
 
 function PunchTest() {
   const body = useBodyDetection();
-  // onPunch = undefined — this page only exercises detection/UI, no rig.
   const onPunch = useCallback(() => {}, []);
   const { onCalibrate, onResetCounts } = usePunchDetector({ onPunch });
 
@@ -122,9 +122,7 @@ function PunchTest() {
           <h1 className="text-lg font-semibold">Jab / cross / guard tuning</h1>
         </div>
         <div className="flex items-center gap-3 font-mono text-xs text-zinc-400">
-          <span
-            className={`h-2 w-2 rounded-full ${body.isReady ? "bg-emerald-400" : "bg-amber-400"}`}
-          />
+          <span className={`h-2 w-2 rounded-full ${body.isReady ? "bg-emerald-400" : "bg-amber-400"}`} />
           <span>{body.isReady ? "READY" : "waiting for webcam…"}</span>
           <span className="text-zinc-600">·</span>
           <span>{body.fps} fps</span>

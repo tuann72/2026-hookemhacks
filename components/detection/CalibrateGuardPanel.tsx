@@ -36,6 +36,9 @@ export function CalibrateGuardPanel({
   const calibrateMsg = usePunchCalibrationStore((s) => s.calibrateMsg);
   const leftCount = usePunchCalibrationStore((s) => s.leftCount);
   const rightCount = usePunchCalibrationStore((s) => s.rightCount);
+  const uppercutCount = usePunchCalibrationStore((s) => s.uppercutCount);
+  const isUppercutMode = usePunchCalibrationStore((s) => s.isUppercutMode);
+  const chargeProgress = usePunchCalibrationStore((s) => s.chargeProgress);
   const leftMetrics = usePunchCalibrationStore((s) => s.leftMetrics);
   const rightMetrics = usePunchCalibrationStore((s) => s.rightMetrics);
   const setPending = usePunchCalibrationStore((s) => s.setPending);
@@ -237,24 +240,46 @@ export function CalibrateGuardPanel({
       <div className="mt-1 font-mono text-[96px] font-bold leading-none tabular-nums text-white">
         {leftCount + rightCount}
       </div>
-      <div className="mt-4 grid w-full max-w-md grid-cols-2 gap-3">
+      <div className="mt-4 grid w-full max-w-md grid-cols-3 gap-3">
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-center">
-          <div className="text-[10px] uppercase tracking-widest text-emerald-400">
-            Left
-          </div>
-          <div className="font-mono text-3xl tabular-nums text-emerald-200">
-            {leftCount}
-          </div>
+          <div className="text-[10px] uppercase tracking-widest text-emerald-400">Left</div>
+          <div className="font-mono text-3xl tabular-nums text-emerald-200">{leftCount}</div>
         </div>
         <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-3 text-center">
-          <div className="text-[10px] uppercase tracking-widest text-cyan-400">
-            Right
-          </div>
-          <div className="font-mono text-3xl tabular-nums text-cyan-200">
-            {rightCount}
-          </div>
+          <div className="text-[10px] uppercase tracking-widest text-cyan-400">Right</div>
+          <div className="font-mono text-3xl tabular-nums text-cyan-200">{rightCount}</div>
+        </div>
+        <div className={`rounded-lg border p-3 text-center transition-colors ${uppercutCount > 0 ? "border-yellow-500/40 bg-yellow-500/10" : "border-zinc-700 bg-zinc-800/30"}`}>
+          <div className="text-[10px] uppercase tracking-widest text-yellow-400">Uppercut</div>
+          <div className="font-mono text-3xl tabular-nums text-yellow-200">{uppercutCount}</div>
         </div>
       </div>
+
+      {chargeProgress > 0 && !isUppercutMode && (
+        <div className="mt-4 w-full max-w-md">
+          <div className="mb-1 text-center text-[10px] uppercase tracking-widest text-yellow-400">
+            Charging uppercut…
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-800">
+            <div
+              className="h-full rounded-full bg-yellow-400 transition-[width] duration-75"
+              style={{ width: `${chargeProgress * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {isUppercutMode && (
+        <div className="mt-4 animate-pulse rounded-xl border border-yellow-400/60 bg-yellow-400/10 px-6 py-3 text-center">
+          <div className="text-sm font-bold uppercase tracking-[0.3em] text-yellow-300">
+            ⚡ Uppercut Mode — Punch Now!
+          </div>
+          <div className="mt-1 text-[10px] tracking-wider text-yellow-400/70">
+            threshold lowered · one shot · resets on punch
+          </div>
+        </div>
+      )}
+
       <div
         className={`mt-5 rounded-full px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.3em] transition-opacity ${
           anyCalibrated
@@ -286,24 +311,25 @@ export function CalibrateGuardPanel({
               total {leftCount + rightCount}
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2 text-center">
-              <div className="text-[9px] uppercase tracking-widest text-emerald-400">
-                Left
-              </div>
-              <div className="font-mono text-xl tabular-nums text-emerald-200">
-                {leftCount}
-              </div>
+              <div className="text-[9px] uppercase tracking-widest text-emerald-400">Left</div>
+              <div className="font-mono text-xl tabular-nums text-emerald-200">{leftCount}</div>
             </div>
             <div className="rounded-md border border-cyan-500/30 bg-cyan-500/5 p-2 text-center">
-              <div className="text-[9px] uppercase tracking-widest text-cyan-400">
-                Right
-              </div>
-              <div className="font-mono text-xl tabular-nums text-cyan-200">
-                {rightCount}
-              </div>
+              <div className="text-[9px] uppercase tracking-widest text-cyan-400">Right</div>
+              <div className="font-mono text-xl tabular-nums text-cyan-200">{rightCount}</div>
+            </div>
+            <div className={`rounded-md border p-2 text-center ${uppercutCount > 0 ? "border-yellow-500/40 bg-yellow-500/10" : "border-zinc-700 bg-zinc-800/30"}`}>
+              <div className="text-[9px] uppercase tracking-widest text-yellow-400">UC</div>
+              <div className="font-mono text-xl tabular-nums text-yellow-200">{uppercutCount}</div>
             </div>
           </div>
+          {isUppercutMode && (
+            <div className="mt-2 animate-pulse rounded-lg border border-yellow-400/60 bg-yellow-400/10 px-3 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-yellow-300">
+              ⚡ Uppercut Mode
+            </div>
+          )}
           <div
             className={`mt-3 rounded-full px-3 py-1 text-center text-[10px] font-semibold uppercase tracking-[0.3em] ${
               anyCalibrated

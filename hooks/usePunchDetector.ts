@@ -10,6 +10,10 @@ import {
   isOff,
   sampleHand,
   wrapAngle,
+  UPPERCUT_ROTATION_THRESH,
+  UPPERCUT_CHARGE_MS,
+  MIN_GUARD_MS,
+  UPPERCUT_SIZE_FACTOR,
 } from "@/lib/detection/punch";
 import type { PoseLandmark } from "@/types";
 
@@ -23,7 +27,7 @@ import type { PoseLandmark } from "@/types";
  * velocity) live here as refs — not in the store — to avoid re-render churn.
  */
 export function usePunchDetector(opts: {
-  onPunch?: (side: "left" | "right") => void;
+  onPunch?: (side: "left" | "right", isUppercut?: boolean) => void;
   /** Fired when a previously-fired hand drops back below thresholds. */
   onRelease?: (side: "left" | "right") => void;
 } = {}): {
@@ -58,7 +62,12 @@ export function usePunchDetector(opts: {
   // Per-hand cooldown timestamp.
   const lastFire = useRef<{ left: number; right: number }>({ left: 0, right: 0 });
 
-  // Ref-stable callbacks so the detection effect's dep array doesn't churn.
+  // Uppercut state machine refs — hot mutables, not in the store.
+  const isUppercutModeRef = useRef(false);
+  const uppercutChargeStartRef = useRef<number | null>(null);
+  const guardHeldSinceRef = useRef<number | null>(null);
+
+  // Ref-stable onPunch so the detection effect's dep array doesn't churn.
   const onPunchRef = useRef(opts.onPunch);
   const onReleaseRef = useRef(opts.onRelease);
   useEffect(() => {
@@ -127,6 +136,9 @@ export function usePunchDetector(opts: {
     usePunchCalibrationStore.getState().resetCounts();
     armed.current = { left: true, right: true };
     lastFire.current = { left: 0, right: 0 };
+    isUppercutModeRef.current = false;
+    uppercutChargeStartRef.current = null;
+    guardHeldSinceRef.current = null;
   }, []);
 
   // Detection tick — reruns whenever hand landmarks change. Thresholds +
@@ -189,6 +201,8 @@ export function usePunchDetector(opts: {
           ) <= active.guard
         : false;
 
+      const knucklesFacing = !!base && rotDelta >= UPPERCUT_ROTATION_THRESH;
+
       return {
         detected: true,
         size: sizeRatioVsBase,
@@ -201,6 +215,7 @@ export function usePunchDetector(opts: {
         rotMet,
         velMet,
         inGuard,
+        knucklesFacing,
       };
     };
 
@@ -208,12 +223,15 @@ export function usePunchDetector(opts: {
     const rotReq = !isOff(active.rotation, RANGES.rotation);
     const velReq = !isOff(active.velocity, RANGES.velocity);
 
-    const fires = (m: HandMetrics): boolean => {
+    const fires = (m: HandMetrics, uppercutMode: boolean): boolean => {
       if (!m.detected) return false;
       if (!sizeReq && !rotReq && !velReq) return false;
-      if (sizeReq && !m.sizeMet) return false;
       if (rotReq && !m.rotMet) return false;
       if (velReq && !m.velMet) return false;
+      if (sizeReq) {
+        const effectiveSize = uppercutMode ? active.size * UPPERCUT_SIZE_FACTOR : active.size;
+        if (m.size < effectiveSize) return false;
+      }
       return true;
     };
 
@@ -223,15 +241,47 @@ export function usePunchDetector(opts: {
     const nowMs = performance.now();
     const mutate = usePunchCalibrationStore.getState();
 
-    if (fires(lm)) {
-      if (
-        armed.current.left &&
-        nowMs - lastFire.current.left >= active.cooldown
-      ) {
+    // Guard hold tracking — gates uppercut charge start.
+    if (lm.inGuard || rm.inGuard) {
+      if (guardHeldSinceRef.current === null) guardHeldSinceRef.current = nowMs;
+    } else {
+      guardHeldSinceRef.current = null;
+    }
+    const guardReady =
+      guardHeldSinceRef.current !== null &&
+      nowMs - guardHeldSinceRef.current >= MIN_GUARD_MS;
+
+    // Uppercut charge state machine.
+    const bothFacing = lm.knucklesFacing && rm.knucklesFacing;
+    if (bothFacing && !isUppercutModeRef.current && guardReady) {
+      if (uppercutChargeStartRef.current === null) uppercutChargeStartRef.current = nowMs;
+      const elapsed = nowMs - uppercutChargeStartRef.current;
+      const progress = Math.min(1, elapsed / UPPERCUT_CHARGE_MS);
+      mutate.setChargeProgress(progress);
+      if (elapsed >= UPPERCUT_CHARGE_MS) {
+        isUppercutModeRef.current = true;
+        mutate.setIsUppercutMode(true);
+        uppercutChargeStartRef.current = null;
+        mutate.setChargeProgress(0);
+      }
+    } else {
+      if (!isUppercutModeRef.current) mutate.setChargeProgress(0);
+      uppercutChargeStartRef.current = null;
+    }
+
+    const inUppercut = isUppercutModeRef.current;
+
+    if (fires(lm, inUppercut)) {
+      if (armed.current.left && nowMs - lastFire.current.left >= active.cooldown) {
         mutate.setLeftCount((c) => c + 1);
+        if (inUppercut) {
+          mutate.setUppercutCount((c) => c + 1);
+          isUppercutModeRef.current = false;
+          mutate.setIsUppercutMode(false);
+        }
         armed.current.left = false;
         lastFire.current.left = nowMs;
-        onPunchRef.current?.("left");
+        onPunchRef.current?.("left", inUppercut);
       }
     } else {
       // Transition from un-armed (still in a fired punch) → armed is the
@@ -242,15 +292,17 @@ export function usePunchDetector(opts: {
       }
     }
 
-    if (fires(rm)) {
-      if (
-        armed.current.right &&
-        nowMs - lastFire.current.right >= active.cooldown
-      ) {
+    if (fires(rm, inUppercut)) {
+      if (armed.current.right && nowMs - lastFire.current.right >= active.cooldown) {
         mutate.setRightCount((c) => c + 1);
+        if (inUppercut) {
+          mutate.setUppercutCount((c) => c + 1);
+          isUppercutModeRef.current = false;
+          mutate.setIsUppercutMode(false);
+        }
         armed.current.right = false;
         lastFire.current.right = nowMs;
-        onPunchRef.current?.("right");
+        onPunchRef.current?.("right", inUppercut);
       }
     } else {
       if (!armed.current.right) {
