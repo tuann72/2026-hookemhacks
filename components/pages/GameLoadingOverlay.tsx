@@ -36,7 +36,7 @@ type GameLoadingOverlayProps = {
  * Must be mounted inside a <BodyDetector> so useBodyDetection() is available.
  */
 export function GameLoadingOverlay({ ready, hasPeerPresence }: GameLoadingOverlayProps) {
-  const { overlayCanvasRef, isReady, leftHandLandmarks, rightHandLandmarks } = useBodyDetection();
+  const { leftHandLandmarks, rightHandLandmarks } = useBodyDetection();
   const baseline = usePunchCalibrationStore((s) => s.baseline);
   const guardCountdown = usePunchCalibrationStore((s) => s.countdown);
   const calibrateMsg = usePunchCalibrationStore((s) => s.calibrateMsg);
@@ -130,6 +130,23 @@ export function GameLoadingOverlay({ ready, hasPeerPresence }: GameLoadingOverla
     return () => window.clearTimeout(t);
   }, [phase]);
 
+  // Position the BodyDetector's debug MediaPipe canvas to match the phase:
+  //   connecting + guard-leadin → hidden (no camera visible)
+  //   guard-hold + guard-done   → centered + enlarged on screen
+  //   gameplay (overlay gone)   → bottom-right corner (default inline style)
+  // Done by toggling classes on <html> that CSS targets .body-debug-canvas.
+  useEffect(() => {
+    const root = document.documentElement;
+    const hide = phase === "connecting" || phase === "guard-leadin";
+    const center = phase === "guard-hold" || phase === "guard-done";
+    root.classList.toggle("hide-body-debug", hide);
+    root.classList.toggle("body-debug-center", center);
+    return () => {
+      root.classList.remove("hide-body-debug");
+      root.classList.remove("body-debug-center");
+    };
+  }, [phase]);
+
   const handleManualRetry = () => {
     if (phase !== "guard-hold") return;
     setRetryCount(0);
@@ -144,109 +161,136 @@ export function GameLoadingOverlay({ ready, hasPeerPresence }: GameLoadingOverla
     !!calibrateMsg &&
     retryCount >= MAX_GUARD_RETRIES - 1;
 
-  const showWebcam = phase !== "connecting";
+  const showWebcam = phase === "guard-hold" || phase === "guard-done";
 
   return (
-    <div className="gload-root" aria-live="polite" role="status">
+    <div aria-live="polite" role="status">
+      {/* Full-screen sand backdrop — below the debug canvas (9999), so the
+       * canvas can show centered on top of it during guard-hold. */}
+      <div className="gload-bg" />
+
       {phase === "connecting" && (
-        <>
+        <div className="gload-fullscreen">
           <div className="gload-sun" />
           <div className="gload-label mono">
             {hasPeerPresence ? "Syncing with your buddy…" : "Joining the cove…"}
           </div>
-        </>
+        </div>
       )}
 
-      {showWebcam && (
-        <div className="gload-stage">
-          <div className="gload-frame">
-            {isReady ? (
-              <canvas
-                ref={overlayCanvasRef}
-                width={640}
-                height={480}
-                className="gload-canvas"
-              />
-            ) : (
-              <div className="gload-canvas gload-canvas-placeholder">
-                <div className="gload-sun gload-sun-small" />
-              </div>
-            )}
-
-            {phase === "guard-leadin" && (
-              <div className="gload-banner gload-banner-leadin">
-                <div className="gload-hint">Guard calibration</div>
-                <div className="gload-big">RAISE YOUR HANDS</div>
-                <div className="gload-sub">Get both hands up, palms forward</div>
-                <div className="gload-bar">
-                  <div className="gload-bar-fill" />
-                </div>
-              </div>
-            )}
-
-            {phase === "guard-hold" && (
-              <div className="gload-banner">
-                {retriesExhausted ? (
-                  <>
-                    <div className="gload-hint">Couldn&apos;t capture your guard</div>
-                    <div className="gload-err">
-                      {calibrateMsg ?? "Make sure both hands are visible."}
-                    </div>
-                    <button
-                      type="button"
-                      className="gload-retry-btn"
-                      onClick={handleManualRetry}
-                    >
-                      Try again
-                    </button>
-                  </>
-                ) : guardCountdown !== null ? (
-                  <>
-                    <div className="gload-hint">Hold your guard</div>
-                    <div className="gload-count">{guardCountdown}</div>
-                    <div className="gload-sub">keep both hands up</div>
-                  </>
-                ) : (
-                  <>
-                    <div className="gload-hint">Hold your guard</div>
-                    <div className="gload-spinner" />
-                    <div className="gload-sub">
-                      {retryCount > 0 ? `Retrying (${retryCount + 1}/${MAX_GUARD_RETRIES})…` : "Get ready…"}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {phase === "guard-done" && (
-              <div className="gload-locked">
-                <div className="gload-locked-burst" />
-                <div className="gload-locked-card">
-                  <div className="gload-locked-check">✓</div>
-                  <div className="gload-locked-title">GUARD LOCKED!</div>
-                  <div className="gload-locked-sub">Starting match…</div>
-                </div>
-              </div>
-            )}
+      {phase === "guard-leadin" && (
+        <div className="gload-fullscreen">
+          <div className="gload-leadin-card">
+            <div className="gload-hint">Guard calibration</div>
+            <div className="gload-big">RAISE YOUR HANDS</div>
+            <div className="gload-sub">Get both hands up, palms forward</div>
+            <div className="gload-bar">
+              <div className="gload-bar-fill" />
+            </div>
           </div>
         </div>
       )}
 
+      {showWebcam && (
+        // Transparent anchor matching where the repositioned debug canvas
+        // lands; houses the countdown banner / lock celebration above it.
+        // Rendered as a top-level sibling so its z-index stacks above the
+        // canvas's inline z-index: 9999.
+        <div className="gload-center-anchor">
+          {phase === "guard-hold" && (
+            <div className="gload-banner">
+              {retriesExhausted ? (
+                <>
+                  <div className="gload-hint">Couldn&apos;t capture your guard</div>
+                  <div className="gload-err">
+                    {calibrateMsg ?? "Make sure both hands are visible."}
+                  </div>
+                  <button
+                    type="button"
+                    className="gload-retry-btn"
+                    onClick={handleManualRetry}
+                  >
+                    Try again
+                  </button>
+                </>
+              ) : guardCountdown !== null ? (
+                <>
+                  <div className="gload-hint">Hold your guard</div>
+                  <div className="gload-count">{guardCountdown}</div>
+                  <div className="gload-sub">keep both hands up</div>
+                </>
+              ) : (
+                <>
+                  <div className="gload-hint">Hold your guard</div>
+                  <div className="gload-spinner" />
+                  <div className="gload-sub">
+                    {retryCount > 0 ? `Retrying (${retryCount + 1}/${MAX_GUARD_RETRIES})…` : "Get ready…"}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {phase === "guard-done" && (
+            <div className="gload-locked">
+              <div className="gload-locked-burst" />
+              <div className="gload-locked-card">
+                <div className="gload-locked-check">✓</div>
+                <div className="gload-locked-title">GUARD LOCKED!</div>
+                <div className="gload-locked-sub">Starting match…</div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <style>{`
-        .gload-root {
+        /* Toggled from GameLoadingOverlay's phase effect.
+         *   .hide-body-debug     → debug canvas hidden
+         *   .body-debug-center   → debug canvas centered + enlarged on screen
+         * The default inline style (bottom:16 right:16, 480x360) kicks back in
+         * as soon as both classes come off (gameplay). */
+        .hide-body-debug .body-debug-canvas { display: none !important; }
+        .body-debug-center .body-debug-canvas {
+          bottom: auto !important;
+          right: auto !important;
+          top: 50% !important;
+          left: 50% !important;
+          transform: translate(-50%, -50%) !important;
+          width: min(720px, 92vw) !important;
+          height: auto !important;
+          aspect-ratio: 4 / 3 !important;
+          border: 3px solid var(--ink) !important;
+          border-radius: var(--radius-lg) !important;
+          box-shadow: var(--shadow-chunky) !important;
+        }
+
+        /* Sand backdrop — sits below the debug canvas (z-index 9999), visible
+         * around it when it's centered during guard phases. */
+        .gload-bg {
           position: fixed;
           inset: 0;
           z-index: 200;
+          background: linear-gradient(180deg, var(--sand) 0%, var(--sand-warm) 100%);
+          animation: gload-fade 160ms ease-out both;
+        }
+        /* Full-screen content layer for connecting + leadin — above the debug
+         * canvas, so the sun/label/leadin-card can sit on the sand. */
+        .gload-fullscreen {
+          position: fixed;
+          inset: 0;
+          z-index: 10001;
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
           gap: 22px;
           padding: 28px 24px;
-          background: linear-gradient(180deg, var(--sand) 0%, var(--sand-warm) 100%);
           color: var(--ink);
           animation: gload-fade 160ms ease-out both;
+          pointer-events: none;
         }
+        .gload-fullscreen > * { pointer-events: auto; }
         @keyframes gload-fade {
           from { opacity: 0; }
           to   { opacity: 1; }
@@ -277,47 +321,21 @@ export function GameLoadingOverlay({ ready, hasPeerPresence }: GameLoadingOverla
           50%      { transform: scale(1.08); opacity: 1; }
         }
 
-        /* Guard phases — card-wrapped webcam frame matching the lobby. */
-        .gload-stage {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 16px;
+        /* Ghost container positioned exactly over the relocated debug canvas —
+         * hosts the countdown banner and lock celebration above it (z-index
+         * above the canvas's 9999). */
+        .gload-center-anchor {
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
           width: min(720px, 92vw);
-        }
-        .gload-stage-title {
-          font-family: var(--font-outfit), sans-serif;
-          font-size: clamp(18px, 3vw, 24px);
-          font-weight: 800;
-          letter-spacing: 0.01em;
-          color: var(--ink);
-          text-align: center;
-        }
-        .gload-frame {
-          position: relative;
-          width: 100%;
           aspect-ratio: 4 / 3;
-          border-radius: var(--radius-lg);
-          overflow: hidden;
-          background: var(--volcano-deep);
-          border: 3px solid var(--ink);
-          box-shadow: var(--shadow-chunky);
-        }
-        .gload-canvas {
-          position: absolute;
-          inset: 0;
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
           pointer-events: none;
-        }
-        .gload-canvas-placeholder {
-          display: flex;
-          align-items: center;
-          justify-content: center;
+          z-index: 10001;
         }
 
-        /* Bottom banner inside the webcam frame. */
+        /* Bottom banner over the centered webcam canvas. */
         .gload-banner {
           position: absolute;
           bottom: 16px;
@@ -336,17 +354,31 @@ export function GameLoadingOverlay({ ready, hasPeerPresence }: GameLoadingOverla
           align-items: center;
           gap: 4px;
           color: var(--ink);
+          pointer-events: auto;
         }
-        .gload-banner-leadin {
-          border-color: var(--sun);
+        /* Standalone "RAISE YOUR HANDS" card for the leadin phase — shown on
+         * the sand backdrop with no webcam behind it. */
+        .gload-leadin-card {
+          background: white;
+          border: 3px solid var(--sun);
+          border-radius: var(--radius-lg);
           box-shadow:
-            0 0 0 4px color-mix(in srgb, var(--sun) 22%, transparent),
+            0 0 0 6px color-mix(in srgb, var(--sun) 22%, transparent),
             var(--shadow-chunky);
+          padding: 28px 36px 24px;
+          text-align: center;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 6px;
+          min-width: min(320px, 88vw);
+          max-width: 440px;
+          color: var(--ink);
           animation: gload-leadin-pulse 0.9s ease-in-out infinite alternate;
         }
         @keyframes gload-leadin-pulse {
-          from { transform: translateX(-50%) scale(1);    }
-          to   { transform: translateX(-50%) scale(1.03); }
+          from { transform: scale(1);    }
+          to   { transform: scale(1.03); }
         }
         .gload-hint {
           font-family: var(--font-outfit), sans-serif;

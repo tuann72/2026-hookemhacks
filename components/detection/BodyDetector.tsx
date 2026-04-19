@@ -26,6 +26,7 @@ export default function BodyDetector({ children, debug = false }: Props) {
       {debug && (
         <canvas
           ref={canvasRef}
+          className="body-debug-canvas"
           width={640}
           height={480}
           style={{ position: "fixed", bottom: 16, right: 16, width: 480, height: 360, border: "1px solid #0f0", zIndex: 9999, background: "#000" }}
