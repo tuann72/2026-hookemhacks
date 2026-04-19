@@ -176,6 +176,21 @@ export class GameChannel {
         if (status === "SUBSCRIBED") {
           this.ready = false;
           await this.trackPresence();
+          // Immediately broadcast a "hello" so the peer's client has something
+          // to stamp for the `peerBroadcastSeen` signal (used to dismiss the
+          // loading overlay). Without this, a joiner whose host hasn't started
+          // sending pose data yet would hang on the overlay indefinitely. Sent
+          // via the existing pose event with no rig — the game page's
+          // onPoseSnapshot already guards on `!snap.rig` so it's a no-op there,
+          // but the hook's stamp wrapper catches it first.
+          this.channel.send({
+            type: "broadcast",
+            event: "pose",
+            payload: {
+              playerId: this.playerId,
+              timestamp: performance.now(),
+            } satisfies PoseSnapshot,
+          });
           // Defer the retry-counter reset: only clear it after the channel
           // has been SUBSCRIBED continuously for 5s. This keeps the backoff
           // climbing during SUBSCRIBED→CLOSED oscillation (which otherwise
