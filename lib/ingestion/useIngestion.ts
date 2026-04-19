@@ -115,10 +115,9 @@ export function useIngestion({ roomId, playerId, stream, enabled = true, frozen 
   useEffect(() => {
     if (!matchId || frozen) return;
 
-    const id = setInterval(async () => {
+    const flush = async () => {
       const events = drainEvents?.() ?? [];
       if (!events.length) return;
-
       try {
         await fetch("/api/match-events", {
           method: "POST",
@@ -128,9 +127,17 @@ export function useIngestion({ roomId, playerId, stream, enabled = true, frozen 
       } catch (err) {
         console.error("[ingestion] event flush failed", err);
       }
-    }, 2_500);
+    };
 
-    return () => clearInterval(id);
+    const id = setInterval(flush, 2_500);
+
+    // On unmount or when `frozen` flips true mid-match, drain whatever is
+    // queued since the last tick — otherwise the last ~2.5s of punches never
+    // reach the DB and downstream stats read 0.
+    return () => {
+      clearInterval(id);
+      flush();
+    };
   }, [matchId, playerId, frozen, drainEvents]);
 
   return { matchId, recorderState };

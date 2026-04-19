@@ -1,6 +1,8 @@
 "use client";
 
 import { BRAND } from "../shared/constants";
+import { usePunchCalibrationStore } from "@/lib/store/punchCalibrationStore";
+import { CALORIES_PER_PUNCH } from "@/lib/combat/damage";
 
 type ResultsProps = {
   winnerName: string;
@@ -21,6 +23,16 @@ export function Results({
   onBackToLobby,
 }: ResultsProps) {
   const heroWord = selfWon ? "VICTORY." : "SUNSET.";
+
+  // Source of truth for per-match counts: the local PunchDetector's store,
+  // which the calibrate panel also reads. More forgiving than useEventTracker
+  // (DB path), so the Results numbers match what the player sees in-match.
+  // Counts reset on each calibration (see GameLoadingOverlay baseline capture).
+  const leftCount = usePunchCalibrationStore((s) => s.leftCount);
+  const rightCount = usePunchCalibrationStore((s) => s.rightCount);
+  const uppercutCount = usePunchCalibrationStore((s) => s.uppercutCount);
+  const punches = leftCount + rightCount + uppercutCount;
+  const calories = punches * CALORIES_PER_PUNCH;
 
   return (
     <div className="results-wrap" role="status" aria-live="polite">
@@ -62,6 +74,17 @@ export function Results({
               </div>
               <div className="name">{loserName}</div>
               <div className="sub mono">next time</div>
+            </div>
+          </div>
+
+          <div className="results-stats">
+            <div className="stat-cell">
+              <span className="stat-number">{punches}</span>
+              <span className="stat-label">Punches</span>
+            </div>
+            <div className="stat-cell calories">
+              <span className="stat-number">{calories}</span>
+              <span className="stat-label">Calories burned</span>
             </div>
           </div>
 
@@ -222,6 +245,41 @@ export function Results({
           font-size: 14px;
           font-weight: 700;
           letter-spacing: 0.12em;
+          color: var(--ink-soft);
+        }
+        .results-stats {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+        .stat-cell {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 2px;
+          padding: 12px 8px;
+          border-radius: var(--radius);
+          background: color-mix(in srgb, var(--ink) 4%, white);
+          border: 2px solid color-mix(in srgb, var(--ink) 12%, transparent);
+        }
+        .stat-cell.calories {
+          background: color-mix(in srgb, var(--sun) 10%, white);
+          border-color: color-mix(in srgb, var(--sun) 32%, transparent);
+        }
+        .stat-cell .stat-number {
+          font-family: var(--font-outfit), sans-serif;
+          font-size: 22px;
+          font-weight: 800;
+          color: var(--ink);
+          line-height: 1.1;
+        }
+        .stat-cell.calories .stat-number { color: var(--sun); }
+        .stat-cell .stat-label {
+          font-family: var(--font-jetbrains-mono), monospace;
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
           color: var(--ink-soft);
         }
         .results-actions {

@@ -142,6 +142,7 @@ export function GameLoadingOverlay({
           return;
         }
         s.setBaselineSides(l, r);
+        s.resetCounts();
         s.setCalibrateMsg(null);
       }, 3000),
     ];

@@ -32,6 +32,8 @@ type CareerRecord = {
   matchesPlayed: number;
   winRate: number | null;
   lastPlayedAt: string | null;
+  totalPunches: number;
+  caloriesBurned: number;
 };
 
 const EXAMPLE_QUERIES = [
@@ -443,6 +445,7 @@ export default function CareerPage() {
           line-height: 1;
         }
         .meta-value.rate { color: var(--sun); }
+        .meta-value.calories { color: var(--sun); }
 
         .winrate-track {
           position: relative;
@@ -960,6 +963,14 @@ function CareerScoreboard({
           <div className="meta-row">
             <span className="meta-label">Win rate</span>
             <span className="meta-value rate">{winRateLabel}</span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-label">Total punches</span>
+            <span className="meta-value">{record.totalPunches}</span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-label">Calories burned</span>
+            <span className="meta-value calories">{record.caloriesBurned}</span>
           </div>
           {record.winRate !== null ? (
             <div className="winrate-track" aria-hidden="true">

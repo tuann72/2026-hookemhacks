@@ -18,6 +18,15 @@ export const MAX_HP = 200;
 /** Damage applied on a counted punch hit, before guard mitigation. */
 export const PUNCH_DAMAGE_BASE = 10;
 
+/** Calories estimated per punch thrown. Used for match + career rollups. */
+export const CALORIES_PER_PUNCH = 10;
+
+/** Multiplier applied to the DB-counted punch total before displaying it.
+ *  The CV punch detector under-counts vs. real throws (fast jabs, partial
+ *  extensions, etc.), so display counts are scaled up. Tweak this, not the
+ *  detector thresholds, if the UI feels off. */
+export const PUNCH_COUNT_DISPLAY_MULTIPLIER = 2.5;
+
 // ─── Mitigation ──────────────────────────────────────────────────────────────
 
 /** Multiplier applied to damage when the target is in guard (0..1). 0.5 = 50% mitigation. */
